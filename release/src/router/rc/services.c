@@ -7109,11 +7109,24 @@ void start_upnp(void)
 
 				/* Provide real IP when in dual NAT situation */
 #ifdef RTCONFIG_GETREALIP
+				int realip_wait;
+				int realip_state;
+				const char *realip_ip;
+
 				strcat_r(prefix, "realip_state", tmp);
-				if (nvram_get_int(tmp) != 2)
-					sleep(5);
-				if (nvram_get_int(tmp) == 2)
-					fprintf(f, "ext_ip=%s\n", nvram_safe_get(strcat_r(prefix, "realip_ip", tmp)));
+				for (realip_wait = 0; realip_wait < 10; realip_wait++) {
+				realip_state = nvram_get_int(tmp);
+    					if (realip_state == 1 || realip_state == 2)
+					        break;
+				    	if (!pids("getrealip.sh"))
+        					break;
+					    sleep(1);
+				}
+				if (realip_state == 2) {
+					realip_ip = nvram_safe_get(strcat_r(prefix, "realip_ip", tmp));
+					if (realip_ip[0] != '\0' && is_valid_ip4(realip_ip))
+						fprintf(f, "ext_ip=%s\n", realip_ip);
+				}
 #endif
 
 				fappend(f, "/etc/upnp/config.custom");
