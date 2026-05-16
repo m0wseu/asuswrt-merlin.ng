@@ -1,4 +1,4 @@
-/* dnsmasq is Copyright (c) 2000-2025 Simon Kelley
+/* dnsmasq is Copyright (c) 2000-2026 Simon Kelley
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -417,7 +417,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	  struct dhcp_context *context_tmp;
 	  for (context_tmp = context; context_tmp; context_tmp = context_tmp->current)
 	    {
-	      inet_ntop(AF_INET, &context_tmp->start, daemon->namebuff, MAXDNAME);
+	      inet_ntop(AF_INET, &context_tmp->start, daemon->namebuff, MAXDNAMESTR);
 	      if (context_tmp->flags & (CONTEXT_STATIC | CONTEXT_PROXY))
 		{
 		  inet_ntop(AF_INET, &context_tmp->netmask, daemon->addrbuff, ADDRSTRLEN);
@@ -601,7 +601,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
       if (mess->file[0])
 	{
 	  memcpy(daemon->dhcp_buff2, mess->file, sizeof(mess->file));
-	  daemon->dhcp_buff2[sizeof(mess->file) + 1] = 0; /* ensure zero term. */
+	  daemon->dhcp_buff2[sizeof(mess->file)] = 0; /* ensure zero term. */
 	  id.net = (char *)daemon->dhcp_buff2;
 	  id.next = netid;
 	  netid = &id;
@@ -1317,7 +1317,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		  unsigned char *mac = extended_hwaddr(ltmp->hwaddr_type, ltmp->hwaddr_len,
 						       ltmp->hwaddr, ltmp->clid_len, ltmp->clid, &len);
 		  my_syslog(MS_DHCP | LOG_WARNING, _("not using configured address %s because it is leased to %s"),
-			    daemon->addrbuff, print_mac(daemon->namebuff, mac, len));
+			    daemon->addrbuff, print_mac(mac, len));
 		}
 	      else
 		{
@@ -1541,7 +1541,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		{
 		  inet_ntop(AF_INET, &ltmp->addr, daemon->addrbuff, ADDRSTRLEN);
 		  my_syslog(MS_DHCP | LOG_INFO, _("abandoning lease to %s of %s"),
-			    print_mac(daemon->namebuff, ltmp->hwaddr, ltmp->hwaddr_len), 
+			    print_mac(ltmp->hwaddr, ltmp->hwaddr_len), 
 			    daemon->addrbuff);
 		  lease = ltmp;
 		}
@@ -1922,16 +1922,18 @@ static void add_extradata_opt(struct dhcp_lease *lease, unsigned char *opt)
 static void log_packet(char *type, void *addr, unsigned char *ext_mac, 
 		       int mac_len, char *interface, char *string, char *err, u32 xid)
 {
+  char *mac = "";
+
   if (!err && !option_bool(OPT_LOG_OPTS) && option_bool(OPT_QUIET_DHCP))
     return;
   
-  daemon->addrbuff[0] = daemon->namebuff[0] = 0;
+  daemon->addrbuff[0] = 0;
   
   if (addr)
     inet_ntop(AF_INET, addr, daemon->addrbuff, ADDRSTRLEN);
   
   if (ext_mac)
-    print_mac(daemon->namebuff, ext_mac, mac_len);
+    mac = print_mac(ext_mac, mac_len);
   
   if (option_bool(OPT_LOG_OPTS))
     my_syslog(MS_DHCP | LOG_INFO, "%u %s(%s) %s%s%s%s%s%s",
@@ -1940,7 +1942,7 @@ static void log_packet(char *type, void *addr, unsigned char *ext_mac,
 	      interface, 
 	      daemon->addrbuff,
 	      addr ? " " : "",
-	      daemon->namebuff,
+	      mac,
 	      ext_mac ? " " : "",
 	      string ? string : "",
 	      err ? err : "");
@@ -1950,16 +1952,16 @@ static void log_packet(char *type, void *addr, unsigned char *ext_mac,
 	      interface, 
 	      daemon->addrbuff,
 	      addr ? " " : "",
-	      daemon->namebuff,
+	      mac,
 	      ext_mac ? " " : "",
 	      string ? string : "",
 	      err ? err : "");
   
 #ifdef HAVE_UBUS
   if (!strcmp(type, "DHCPACK"))
-    ubus_event_bcast("dhcp.ack", daemon->namebuff, addr ? daemon->addrbuff : NULL, string, interface);
+    ubus_event_bcast("dhcp.ack", mac, addr ? daemon->addrbuff : NULL, string, interface);
   else if (!strcmp(type, "DHCPRELEASE"))
-    ubus_event_bcast("dhcp.release", daemon->namebuff, addr ? daemon->addrbuff : NULL, string, interface);
+    ubus_event_bcast("dhcp.release", mac, addr ? daemon->addrbuff : NULL, string, interface);
 #endif
 }
 
@@ -1967,7 +1969,7 @@ static void log_options(unsigned char *start, u32 xid)
 {
   while (*start != OPTION_END)
     {
-      char *optname = option_string(AF_INET, start[0], option_ptr(start, 0), option_len(start), daemon->namebuff, MAXDNAME);
+      char *optname = option_string(AF_INET, start[0], option_ptr(start, 0), option_len(start), daemon->namebuff, MAXDNAMESTR);
       
       my_syslog(MS_DHCP | LOG_INFO, "%u sent size:%3d option:%3d %s  %s", 
 		ntohl(xid), option_len(start), start[0], optname, daemon->namebuff);
@@ -2646,7 +2648,7 @@ static void do_options(struct dhcp_context *context,
       for (i = 0; req_options[i] != OPTION_END; i++)
 	{
 	  char *s = option_string(AF_INET, req_options[i], NULL, 0, NULL, 0);
-	  q += snprintf(q, MAXDNAME - (q - daemon->namebuff),
+	  q += snprintf(q, MAXDNAMESTR - (q - daemon->namebuff),
 			"%d%s%s%s", 
 			req_options[i],
 			strlen(s) != 0 ? ":" : "",
@@ -3252,7 +3254,7 @@ unsigned int relay_reply4(struct dhcp_packet *mess, size_t sz, char *arrival_int
 
 	      /* delete agent info before return RFC 3046 para 2.1 */
 	      *opt = OPTION_END;
-	      memset(opt + 1, 0, option_len(opt) + 2);
+	      memset(opt + 1, 0, option_len(opt) + 1);
 	    }
 	}
       else if (mess->giaddr.s_addr == relay->local.addr4.s_addr)

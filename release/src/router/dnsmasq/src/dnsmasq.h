@@ -1,4 +1,4 @@
-/* dnsmasq is Copyright (c) 2000-2025 Simon Kelley
+/* dnsmasq is Copyright (c) 2000-2026 Simon Kelley
  
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,7 +14,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define COPYRIGHT "Copyright (c) 2000-2025 Simon Kelley"
+#define COPYRIGHT "Copyright (c) 2000-2026 Simon Kelley"
 
 /* We do defines that influence behavior of stdio.h, so complain
    if included too early. */
@@ -201,6 +201,11 @@ struct event_desc {
 #define EVENT_TIME_ERR   24
 #define EVENT_SCRIPT_LOG 25
 #define EVENT_TIME       26
+#define EVENT_LINK_ERR   27
+#define EVENT_INOTFY_ERR 28
+#define EVENT_TMSL_ERR   29
+#define EVENT_RESOLV_ERR 30
+#define EVENT_IFILE_ERR  31
 
 /* Exit codes. */
 #define EC_GOOD        0
@@ -1267,10 +1272,10 @@ extern struct daemon {
   /* globally used stuff for DNS */
   char *packet; /* packet buffer */
   int packet_buff_sz; /* size of above */
-  char *namebuff; /* MAXDNAME size buffer */
+  char *namebuff; /* MAXDNAMESTR+1 size buffer */
   char *workspacename;
 #ifdef HAVE_DNSSEC
-  char *keyname, *cname; /* MAXDNAME size buffer */
+  char *keyname, *cname; /* MAXDNAMESTR+1 size buffer */
   unsigned long *rr_status; /* ceiling in TTL from DNSSEC or zero for insecure */
   int rr_status_sz;
   int dnssec_no_time_check;
@@ -1464,11 +1469,12 @@ int in_zone(struct auth_zone *zone, char *name, char **cut);
 
 /* dnssec.c */
 #ifdef HAVE_DNSSEC
-size_t dnssec_generate_query(struct dns_header *header, unsigned char *end, char *name, int class, int id, int type);
+size_t dnssec_generate_query(struct dns_header *header, size_t outlen, char *name, int class, int id, int type);
 int dnssec_validate_by_ds(time_t now, struct dns_header *header, size_t plen, char *name,
 			  char *keyname, int class, int *validate_count);
 int dnssec_validate_ds(time_t now, struct dns_header *header, size_t plen, char *name,
 		       char *keyname, int class, int *validate_count);
+int cache_neg_ds(char *name, int flags, int class, time_t now, int neg_ttl);
 int dnssec_validate_reply(time_t now, struct dns_header *header, size_t plen, char *name, char *keyname, int *class,
 			  int check_unsigned, int *neganswer, int *prim_ok, int *nons, int *nsec_ttl, int *validate_count);
 int dnskey_keytag(int alg, int flags, unsigned char *key, int keylen);
@@ -1485,6 +1491,7 @@ int verify(struct blockdata *key_data, unsigned int key_len, unsigned char *sig,
 char *ds_digest_name(int digest);
 char *algo_digest_name(int algo);
 char *nsec3_digest_name(int digest);
+void nettle_digest_wrapper(const struct nettle_hash *hash, void *ctx, size_t length, uint8_t *dst);
 
 /* util.c */
 void rand_init(void);
@@ -1495,16 +1502,23 @@ int rr_on_list(struct rrlist *list, unsigned short rr);
 int legal_hostname(char *name);
 int valid_hostname(char *name);
 char *canonicalise(char *in, int *nomem);
-unsigned char *do_rfc1035_name(unsigned char *p, char *sval, char *limit);
+unsigned char *do_rfc1035_name(unsigned char *p, char *sval, unsigned char *limit);
 void *safe_malloc(size_t size);
 void safe_strncpy(char *dest, const char *src, size_t size);
 void safe_pipe(int *fd, int read_noblock);
+#define malloc_log(x, y) malloc_log_real(__func__, __LINE__, (x), (y))
 #define whine_malloc(x) whine_malloc_real(__func__, __LINE__, (x))
-#define whine_realloc(x, y) whine_realloc_real(__func__, __LINE__, (x), (y))
+#define whine_realloc(x, y) whine_realloc_real(NULL, __func__, __LINE__, (x), (y))
+#define expand_buf(x, y) expand_buf_real(__func__, __LINE__, (x), (y))
+#define expand_workspace(x, y, z) expand_workspace_real(__func__, __LINE__, (x), (y), (z))
 #define free(x) free_real(__func__, __LINE__, (x))
+void malloc_log_real(const char *func, unsigned int line, void *mem, size_t size);
 void free_real(const char *func, unsigned int line, void *ptr);
 void *whine_malloc_real(const char *func, unsigned int line, size_t size);
-void *whine_realloc_real(const char *func, unsigned int line, void *ptr, size_t size);
+void *whine_realloc_real(const char *wrapper, const char *func, unsigned int line, void *ptr, size_t size);
+int expand_buf_real(const char *func, unsigned int line, struct iovec *iov, size_t size);
+int expand_workspace_real(const char *func, unsigned int line, unsigned char ***wkspc, int *szp, int new);
+int get_line_alloc(FILE *f, char **buffp, size_t *sizep);
 int sa_len(union mysockaddr *addr);
 int sockaddr_isequal(const union mysockaddr *s1, const union mysockaddr *s2);
 int sockaddr_isnull(const union mysockaddr *s);
@@ -1526,8 +1540,7 @@ int parse_hex(char *in, unsigned char *out, int maxlen,
 	      unsigned int *wildcard_mask, int *mac_type);
 int memcmp_masked(unsigned char *a, unsigned char *b, int len, 
 		  unsigned int mask);
-int expand_buf(struct iovec *iov, size_t size);
-char *print_mac(char *buff, unsigned char *mac, int len);
+char *print_mac(unsigned char *mac, int len);
 int read_write(int fd, unsigned char *packet, int size, int rw);
 int read_writev(int fd, struct iovec *iov, int iovcnt, int rw);
 void close_fds(long max_fd, int spare1, int spare2, int spare3);
@@ -1908,7 +1921,7 @@ int detect_loop(char *query, int type);
 
 /* inotify.c */
 #ifdef HAVE_INOTIFY
-void inotify_dnsmasq_init(void);
+void inotify_dnsmasq_init(int errfd);
 int inotify_check(time_t now);
 void set_dynamic_inotify(int flag, int total_size, struct crec **rhash, int revhashsz);
 #endif
@@ -1922,7 +1935,6 @@ int do_poll(int timeout);
 /* rrfilter.c */
 size_t rrfilter(struct dns_header *header, size_t *plen, int mode);
 short *rrfilter_desc(int type);
-int expand_workspace(unsigned char ***wkspc, int *szp, int new);
 int to_wire(char *name);
 void from_wire(char *name);
 /* modes. */
@@ -1933,11 +1945,11 @@ void from_wire(char *name);
 /* edns0.c */
 unsigned char *find_pseudoheader(struct dns_header *header, size_t plen,
 				   size_t *len, unsigned char **p, int *is_sign, int *is_last);
-size_t add_pseudoheader(struct dns_header *header, size_t plen, unsigned char *limit, 
+size_t add_pseudoheader(struct dns_header *header, size_t plen, size_t out_size, 
 			int optno, unsigned char *opt, size_t optlen, int set_do, int replace);
-size_t add_do_bit(struct dns_header *header, size_t plen, unsigned char *limit);
+size_t add_do_bit(struct dns_header *header, size_t plen, size_t outlen);
 void edns0_needs_mac(union mysockaddr *addr, time_t now);
-size_t add_edns0_config(struct dns_header *header, size_t plen, unsigned char *limit, 
+size_t add_edns0_config(struct dns_header *header, size_t plen, size_t outlen, 
 			union mysockaddr *source, time_t now, int *cacheable);
 int check_source(struct dns_header *header, size_t plen, unsigned char *pseudoheader, union mysockaddr *peer);
 
@@ -1960,7 +1972,7 @@ int lookup_domain(char *qdomain, int flags, int *lowout, int *highout);
 int filter_servers(int seed, int flags, int *lowout, int *highout);
 int is_local_answer(time_t now, int first, char *name);
 size_t make_local_answer(int flags, int gotname, size_t size, struct dns_header *header,
-			 char *name, char *limit, int first, int last, int ede);
+			 char *name, size_t limit, int first, int last, int ede);
 int server_samegroup(struct server *a, struct server *b);
 #ifdef HAVE_DNSSEC
 int dnssec_server(struct server *server, char *keyname, int is_ds, int *firstp, int *lastp);
