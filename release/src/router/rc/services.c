@@ -2443,10 +2443,12 @@ void add_ip6_lanaddr(void)
 {
 	char ip[INET6_ADDRSTRLEN + 4];
 	const char *p;
+	int prefix_len;
 
 	p = ipv6_router_address(NULL);
 	if (*p) {
-		snprintf(ip, sizeof(ip), "%s/%d", p, nvram_get_int(ipv6_nvname("ipv6_prefix_length")) ? : 64);
+		prefix_len = nvram_get_int(ipv6_nvname("ipv6_prefix_length"));
+		snprintf(ip, sizeof(ip), "%s/%d", p, (prefix_len > 64 ? prefix_len : 64));
 		eval("ip", "-6", "addr", "add", ip, "dev", nvram_safe_get("lan_ifname"));
 		if (!nvram_match(ipv6_nvname("ipv6_rtr_addr"), (char*)p))
 			nvram_set(ipv6_nvname("ipv6_rtr_addr"), (char*)p);
@@ -21025,6 +21027,10 @@ ddns_custom_updated_main(int argc, char *argv[])
 	if ((argc == 2 && !strcmp(argv[1], "1")) || (argc == 1)) {
 		nvram_set("ddns_status", "1");
 		nvram_set("ddns_updated", "1");
+#ifdef RTCONFIG_IPV6
+		if (nvram_get_int("ddns_ipv6_update"))
+			nvram_set("ddns_ipv6_updated", "1");
+#endif
 		nvram_set("ddns_return_code", "200");
 		nvram_set("ddns_return_code_chk", "200");
 		nvram_set("ddns_server_x_old", nvram_safe_get("ddns_server_x"));
