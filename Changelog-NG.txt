@@ -17,11 +17,11 @@ Asuswrt-Merlin Changelog
          a new client key each time you click on it.
   - UPDATED: Merged with GPL 388_25633.
   - UPDATED: dnsmasq to 2.93 + some backports.
-  - UPDATED: OpenVPN to 2.7.4.
+  - UPDATED: OpenVPN to 2.7.5.
   - UPDATED: tor to 0.4.8.22.
   - UPDATED: curl to 8.17 (backport from 102_39848).
   - UPDATED: wget to 1.25 (backport from 102_39848).
-  - UPDATED: dropbear to 2026.91.
+  - UPDATED: dropbear to 2026.92.
   - UPDATED: miniupnpd to 2.3.10-42965d7.
   - UPDATED: haveged to 1.9.22.
   - CHANGED: Added new 2024 DNSSEC trust anchor, which will
@@ -29,6 +29,16 @@ Asuswrt-Merlin Changelog
   - CHANGED: VPN Status page can now detect running but
              non-connected WireGuard client tunnels, and
              report them as being in an error state.
+  - CHANGED: Include two separate miniupnpd builds - with,
+             and without IGDv2 support.  Run the appropriate
+             version based on whether the user enables IGDv2
+             or not.  This is to improve compatibility, as
+             IGDv2 support is still problematic for some
+             clients, and cannot be fully disabled at
+             run time.
+  - CHANGED: dhcpc-event script will now be run after the event
+             occured rather than before, allowing it to modify
+             what was applied to the router configuration.
   - FIXED: Multiple minor CVE for OpenSSL 1.1: CVE-2025-68160,
            CVE-2025-69418, CVE-2025-69419, CVE-2025-69420,
            CVE-2025-69421, CVE-2026-22795, CVE-2026-22796,
