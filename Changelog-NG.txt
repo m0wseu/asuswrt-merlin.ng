@@ -56,6 +56,7 @@ Asuswrt-Merlin Changelog
            GPL merge)
   - FIXED: ntpd stops answering after a few days (workaround
            by restarting it every 24 hours)
+  - FIXED: Option to show/hide DHCP events was missing.
   - REMOVED: Support for secret static key authentication
              from both OpenVPN clients and servers.  Deprecated
              since 2.7.0, and considered outdated in terms of
