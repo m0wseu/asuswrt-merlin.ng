@@ -7041,7 +7041,7 @@ curl/Makefile: curl/configure
 		--enable-http --enable-ftp --enable-file \
 		--disable-ldap --disable-ldaps --disable-rtsp \
 		--disable-proxy --disable-dict --disable-telnet \
-		--disable-tftp  \
+		--disable-tftp --without-libpsl \
 		--disable-gopher \
 		--disable-manual --disable-libcurl-option $(if $(RTCONFIG_IPV6),--enable-ipv6,--disable-ipv6) \
 		--disable-threaded-resolver --disable-ntlm-wb \
