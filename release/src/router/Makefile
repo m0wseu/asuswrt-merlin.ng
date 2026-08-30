@@ -1636,8 +1636,6 @@ obj-$(RTCONFIG_TELENET) += lanauth
 #endif
 obj-y += haveged
 
-#obj-$(RTCONFIG_BWDPI) += faketc
-
 ifeq ($(RTCONFIG_BCMARM),y)
 obj-y += libnfnetlink-1.0.1
 obj-y += libmnl-1.0.4
@@ -3846,10 +3844,9 @@ iptables-1.4.x-clean:
 
 miniupnpd/config.h: shared/version.h
 ifeq ($(RTCONFIG_IGD2),y)
-	cd miniupnpd && ./configure --vendorcfg --leasefile $(if $(RTCONFIG_IPV6),--ipv6,) --igd2 --portinuse $(if $(RTCONFIG_AURASYNC),--aurasync,) $(if $(RTCONFIG_GEFORCENOW),--nvgfn) --iptablespath=$(TOP)/$(IPTABLES)
-else
-	cd miniupnpd && ./configure --vendorcfg --leasefile --portinuse $(if $(RTCONFIG_AURASYNC),--aurasync,) $(if $(RTCONFIG_GEFORCENOW),--nvgfn) --iptablespath=$(TOP)/$(IPTABLES)
+	cd miniupnpd-igdv2 && ./configure --vendorcfg --leasefile $(if $(RTCONFIG_IPV6),--ipv6,) --igd2 --portinuse $(if $(RTCONFIG_AURASYNC),--aurasync,) $(if $(RTCONFIG_GEFORCENOW),--nvgfn) --iptablespath=$(TOP)/$(IPTABLES) --disable-pppconn
 endif
+	cd miniupnpd && ./configure --vendorcfg --leasefile --portinuse $(if $(RTCONFIG_AURASYNC),--aurasync,) $(if $(RTCONFIG_GEFORCENOW),--nvgfn) --iptablespath=$(TOP)/$(IPTABLES) --disable-pppconn
 
 miniupnpd: $(IPTABLES) e2fsprogs miniupnpd/config.h
 	@$(SEP)
@@ -3860,10 +3857,23 @@ miniupnpd: $(IPTABLES) e2fsprogs miniupnpd/config.h
 	    EXTRACFLAGS="-Os $(EXTRACFLAGS) -idirafter$(KERNEL_HEADER_DIR) $(if $(or $(RTCONFIG_AURASYNC), $(RTCONFIG_GEFORCENOW)), -I$(TOP)/shared) -ffunction-sections -fdata-sections  $(if $(RTCONFIG_AUPNPC),-DASUSWRT) -I$(TOP)/e2fsprogs/lib" \
 	    LDFLAGS="$(EXTRALDFLAGS) -ffunction-sections -fdata-sections -Wl,--gc-sections -L$(IPTC_LIBDIR) -L$(TOP)/e2fsprogs/lib" \
 		LDLIBS="-Wl,--as-needed $(if $(or $(RTCONFIG_AURASYNC), $(RTCONFIG_GEFORCENOW)),-L$(TOP)/shared -lshared -L$(TOP_PLATFORM)/nvram$(BCMEX)$(EX7) -lnvram $(if $(BCM_502L07P2),-L$(TOP_PLATFORM)/ethctl_lib -lethctl)) -luuid -lrt $(IPTC_LIBS) $(if $(RTCONFIG_HND_ROUTER),-L$(TOP_PLATFORM)/wlcsm$(EXHND) -lwlcsm)"
+ifeq ($(RTCONFIG_IGD2),y)
+	cp -f ./shared/version.h miniupnpd-igdv2/.
+	PKG_CONFIG=false ARCH=$(PLATFORM) \
+	$(MAKE) -C miniupnpd-igdv2 -f Makefile $(PARALLEL_BUILD) \
+	    IPTABLESPATH=$(TOP)/$(IPTABLES) \
+	    EXTRACFLAGS="-Os $(EXTRACFLAGS) -idirafter$(KERNEL_HEADER_DIR) $(if $(or $(RTCONFIG_AURASYNC), $(RTCONFIG_GEFORCENOW)), -I$(TOP)/shared) -ffunction-sections -fdata-sections  $(if $(RTCONFIG_AUPNPC),-DASUSWRT) -I$(TOP)/e2fsprogs/lib" \
+	    LDFLAGS="$(EXTRALDFLAGS) -ffunction-sections -fdata-sections -Wl,--gc-sections -L$(IPTC_LIBDIR) -L$(TOP)/e2fsprogs/lib" \
+		LDLIBS="-Wl,--as-needed $(if $(or $(RTCONFIG_AURASYNC), $(RTCONFIG_GEFORCENOW)),-L$(TOP)/shared -lshared -L$(TOP_PLATFORM)/nvram$(BCMEX)$(EX7) -lnvram $(if $(BCM_502L07P2),-L$(TOP_PLATFORM)/ethctl_lib -lethctl)) -luuid -lrt $(IPTC_LIBS) $(if $(RTCONFIG_HND_ROUTER),-L$(TOP_PLATFORM)/wlcsm$(EXHND) -lwlcsm)"
+endif
 
 miniupnpd-clean:
 	-@$(MAKE) -C miniupnpd -f Makefile clean
 	-@rm miniupnpd/config.h
+ifeq ($(RTCONFIG_IGD2),y)
+	-@$(MAKE) -C miniupnpd-igdv2 -f Makefile clean
+	-@rm miniupnpd-igdv2/config.h
+endif
 
 miniupnpd_1.4: $(IPTABLES) shared/version.h
 	@$(SEP)
@@ -3880,6 +3890,10 @@ miniupnpd_1.4-clean:
 miniupnpd$(MUVER)-install: miniupnpd$(MUVER)
 	install -D miniupnpd$(MUVER)/miniupnpd $(INSTALLDIR)/miniupnpd$(MUVER)/usr/sbin/miniupnpd
 	$(STRIP) $(INSTALLDIR)/miniupnpd$(MUVER)/usr/sbin/miniupnpd
+ifeq ($(RTCONFIG_IGD2),y)
+	install -D miniupnpd-igdv2/miniupnpd $(INSTALLDIR)/miniupnpd$(MUVER)/usr/sbin/miniupnpd-igdv2
+	$(STRIP) $(INSTALLDIR)/miniupnpd$(MUVER)/usr/sbin/miniupnpd-igdv2
+endif
 
 miniupnpc:
 	$(MAKE) -C miniupnpc
@@ -5148,9 +5162,7 @@ iproute2:
 
 iproute2-install: iproute2
 	install -D iproute2/tc/tc $(INSTALLDIR)/iproute2/usr/sbin/tc
-#	install -D iproute2/tc/tc $(INSTALLDIR)/iproute2/usr/sbin/realtc
 	$(STRIP) $(INSTALLDIR)/iproute2/usr/sbin/tc
-#	$(STRIP) $(INSTALLDIR)/iproute2/usr/sbin/realtc
 	install -D iproute2/ip/ip $(INSTALLDIR)/iproute2/usr/sbin/ip
 	$(STRIP) $(INSTALLDIR)/iproute2/usr/sbin/ip
 
@@ -5160,7 +5172,6 @@ iproute2-3.x: kernel_header iptables-1.4.x
 
 iproute2-3.x-install: iproute2-3.x
 	install -D iproute2-3.x/tc/tc $(INSTALLDIR)/iproute2-3.x/usr/sbin/tc
-#	install -D iproute2-3.x/tc/tc $(INSTALLDIR)/iproute2-3.x/usr/sbin/realtc
 	install -D iproute2-3.x/ip/ip $(INSTALLDIR)/iproute2-3.x/usr/sbin/ip
 	$(STRIP) $(INSTALLDIR)/iproute2-3.x/usr/sbin/*
 	@if [ -e iproute2-3.x/tc/m_xt.so ] ; then \
@@ -5208,7 +5219,6 @@ iproute2-4.3-install:
 iproute2-4.3-clean:
 	-@$(MAKE) -C iproute2-4.3 clean
 	-rm -f $(INSTALL_DIR)/usr/sbin/tc
-#	-rm -f $(INSTALL_DIR)/usr/sbin/realtc
 	-rm -f $(INSTALL_DIR)/usr/sbin/ip
 	-rm -f iproute2-4.3/iproute2/Config
 
@@ -6488,7 +6498,14 @@ easy-rsa-clean:
 easy-rsa-install:
 	@$(SEP)
 	mkdir -p $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+ifeq ($(or $(RTCONFIG_OPENSSL30),$(RTCONFIG_OPENSSL35)),y)
+	mkdir -p $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa/x509-types
+	install easy-rsa/easyrsa3/easyrsa $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+	install easy-rsa/easyrsa3/openssl-easyrsa.cnf $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+	install easy-rsa/easyrsa3/x509-types/* $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa/x509-types
+else
 	install easy-rsa/2.0/* $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+endif
 
 openvpn: shared $(if $(BCM_502L07P2),ethctl_lib) openssl lzo$(LZO_VER) libcap-ng openpam zlib openvpn/Makefile
 	$(MAKE) -C $@ $(PARALLEL_BUILD)
@@ -6897,6 +6914,9 @@ strongswan/Makefile: strongswan/configure
 	--enable-acert --enable-agent \
 	--enable-md4 \
 	--enable-eap-identity --enable-eap-md5 --enable-eap-mschapv2 --enable-eap-tls --enable-eap-peap \
+	--enable-stroke \
+	--enable-aes --enable-des --enable-fips-prf --enable-gcm \
+	--enable-curve25519 --enable-hmac --enable-md5 --enable-sha1 --enable-sha2 \
 	--enable-cmd --enable-libipsec \
 	--enable-shared --disable-static \
 	--with-ipsecdir=/usr/lib/ipsec \
@@ -7052,6 +7072,7 @@ curl/Makefile: curl/configure
 		--disable-manual --disable-libcurl-option $(if $(RTCONFIG_IPV6),--enable-ipv6,--disable-ipv6) \
 		--disable-threaded-resolver --disable-ntlm-wb \
 		--disable-doh --disable-netrc --disable-dnsshuffle \
+		--without-libpsl \
 		$(if $(RTCONFIG_TR069),--with-libssh2=$(STAGEDIR)/usr,--without-zlib) \
 		$(if $(RTCONFIG_OPENSSL11)$(RTCONFIG_OPENSSL10),--with-ssl=$(TOP)/openssl --with-ca-fallback,--without-ssl) \
 		$(if $(RTCONFIG_MBEDTLS),--with-mbedtls=$(STAGEDIR)/usr,--without-mbedtls) \
@@ -7730,11 +7751,19 @@ GeoIP-1.6.2-clean:
 	-@[ ! -f GeoIP-1.6.2/Makefile ] || $(MAKE) -C GeoIP-1.6.2 distclean
 	@rm -f GeoIP-1.6.2/stamp-h1
 
+AUTOMAKE_117 := $(shell automake --version 2>/dev/null | head -n1 | grep -q '1\.17' && echo yes)
+
 wget/Makefile.in: wget/Makefile.am
+ifeq ($(AUTOMAKE_117),yes)
+	@echo "==> automake 1.17 detected, running autoreconf"
 	cd wget && autoreconf -fi
+else
+	@echo "==> automake 1.17 NOT found, skip autoreconf"
+endif
 
 wget/Makefile: wget/Makefile.in
-	cd wget && $(CONFIGURE) \
+	cd wget && touch aclocal.m4 && touch configure && touch Makefile.in && touch src/Makefile.in && \
+		$(CONFIGURE) \
 		--with-ssl=openssl --prefix=/usr --sysconfdir=/etc \
 		--disable-opie --disable-ntlm --disable-debug --disable-nls --disable-rpath \
 		$(if $(RTCONFIG_IPV6),,--disable-ipv6) --disable-iri --without-included-regex  \
@@ -7747,10 +7776,21 @@ wget/Makefile: wget/Makefile.in
 		LDFLAGS="$(EXTRALDFLAGS) -Wl,--gc-sections -L$(STAGEDIR)/usr/lib -pthread"
 
 wget: openssl zlib wget/Makefile
+ifeq ($(AUTOMAKE_117),yes)
 	$(MAKE) -C $@ $(PARALLEL_BUILD)
+else
+	$(MAKE) -C $@ $(PARALLEL_BUILD) ACLOCAL=true \
+          AUTOMAKE=true \
+          AUTOCONF=true \
+          AUTOHEADER=true
+endif
 
 wget-clean:
+ifeq ($(AUTOMAKE_117),yes)
 	[ ! -f wget/Makefile ] || $(MAKE) -C wget distclean
+else
+	[ ! -f wget/Makefile ] || $(MAKE) -C wget clean
+endif
 	@rm -f wget/Makefile
 
 wget-install:
@@ -9136,8 +9176,7 @@ endif
 	$(MAKE) -C $(TOPX_DIR)/dtc-1.5.1 EXTRA_CFLAGS="-I$(TOP)/libyaml/include" LDFLAGS="-L$(TOP)/libyaml/src/.libs"
 
 fdt-install: fdt
-	@$(eval TOPX_DIR:=$(firstword $(wildcard $(TOP_PLATFORM)/fdt/dtc-1.5.1) $(wildcard fdt/dtc-1.5.1)))
-	$(MAKE) -C $(TOPX_DIR) INSTALLDIR=$(INSTALLDIR)/fdt/dtc-1.5.1 install
+	@true
 
 # .PHONY : fdt
 
@@ -10015,7 +10054,7 @@ libimobiledevice-1.3.0/Makefile:
 	$(MAKE) libimobiledevice-1.3.0-configure
 
 libimobiledevice-1.3.0: libimobiledevice-1.3.0/Makefile
-	$(MAKE) -C $@ && $(MAKE) $@-stage
+	$(MAKE) -C $@ $(PARALLEL_BUILD) && $(MAKE) $@-stage
 
 libimobiledevice-1.3.0-install: libimobiledevice-1.3.0
 	install -D libimobiledevice-1.3.0/tools/idevicebackup $(INSTALLDIR)/libimobiledevice-1.3.0/usr/bin/idevicebackup

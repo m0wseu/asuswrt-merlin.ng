@@ -227,6 +227,7 @@ static int btn_count_setup_second = 0;
 static int btn_pressed_toggle_radio = 0;
 #endif
 static long ddns_update_timer = 0;
+static long ntpd_timer = 0;
 
 #if defined(RTCONFIG_WIRELESS_SWITCH) && defined(RTCONFIG_DSL)
 // for WLAN sw init, only for slide switch
@@ -9015,7 +9016,7 @@ void rssi_check()
 }
 #endif
 
-#ifdef RTCONFIG_WATCH_WLREINIT
+#if defined(RTCONFIG_WATCH_WLREINIT) || defined(TUFAX3000_V2) || defined(RTAX58U_V2) || defined(RTAX3000N) || defined(BR63)
 void wlcnt_chk()
 {
 	char cmdbuf[64], buf[16], rbuf[128];
@@ -9067,10 +9068,9 @@ void wlcnt_chk()
 			close(fd);
 		}
 	}
-
-	if(watch_prd++ % wlshoot_period == 0) {
+	if ((watch_prd++ % wlshoot_period == 0) || (val - pre_val > wlshoot)) {
 		if(val - pre_val > wlshoot) {
-			_dprintf("\nWL go insanity! calm down it\n");
+			printf("\nWL go insanity! calm down it\n");
 #ifndef RTCONFIG_AHS
 			logmessage("watchdog", "detect wl reinit count %d", val - pre_val);
 			for(unit = 0; unit < WL_NR_BANDS; ++unit) {
@@ -9085,8 +9085,21 @@ void wlcnt_chk()
 					logmessage("watchdog", "reinit of unit%d:%d", unit, val_all[unit] - pre_all[unit]);
 				}
 			}
+#if defined(TUFAX3000_V2) || defined(RTAX58U_V2) || defined(RTAX3000N) || defined(BR63)
+			unload_wl();
+			sleep(2);
+#ifdef RTCONFIG_DHDAP
+			load_wl();
+#else
+			eval("insmod", "wl");
+#endif
+			restart_wireless();
+			val = 0;
+			memset(&val_all[0], 0, sizeof(val_all));
+#endif
 #endif
 		}
+
 		pre_val = val;
 		for(unit = 0; unit < WL_NR_BANDS; ++unit) {
 			pre_all[unit] = val_all[unit];
@@ -10166,6 +10179,8 @@ void watchdog(int sig)
 #endif
 #ifdef RTCONFIG_BCMWL6
 	if (!no_need_acsd() &&
+		nvram_get_int("wlready") &&
+		nvram_get_int("success_start_service") &&
 #ifdef RTCONFIG_HND_ROUTER_AX
 		!pids("acsd2")
 #else
@@ -10260,7 +10275,7 @@ wdp:
 #ifdef RTCONFIG_USER_LOW_RSSI
 	rssi_check();
 #endif
-#ifdef RTCONFIG_WATCH_WLREINIT
+#if defined(RTCONFIG_WATCH_WLREINIT) || defined(TUFAX3000_V2) || defined(RTAX58U_V2) || defined(RTAX3000N) || defined(BR63)
 	wlcnt_chk();
 #endif
 	/* check for time-related services */
@@ -10436,6 +10451,13 @@ wdp:
 #ifdef RTCONFIG_FRS_FEEDBACK
 	feedback_check();
 #endif /* RTCONFIG_FRS_FEEDBACK */
+#if RTCONFIG_NTPD
+	if (++ntpd_timer >= DAY_PERIOD) {
+		ntpd_timer = 0;
+		logmessage("ntpd", "Daily service restart");
+		notify_rc("restart_ntpd");
+	}
+#endif
 }
 
 #if ! (defined(RTCONFIG_QCA) || defined(RTCONFIG_RALINK))
