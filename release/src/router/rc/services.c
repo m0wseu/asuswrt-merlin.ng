@@ -1425,7 +1425,7 @@ int write_etc_hosts()
 
 			if (ip && *ip != '\0' && hostname && *hostname != '\0' && is_valid_hostname(hostname))
 			{
-				fprintf(fp, "%s %s.%s\n", ip, hostname, lan_domain);
+				fprintf(fp, "%s %s.%s %s\n", ip, hostname, lan_domain, hostname);
 			}
 		}
 		free(nv);
@@ -2123,6 +2123,7 @@ void start_dnsmasq(void)
 #endif
 	if (nvram_get_int("dnssec_enable")) {
 		fprintf(fp, "trust-anchor=.,20326,8,2,E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D\n"
+		            "trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16\n"
 		            "dnssec\n");
 
 		/* If NTP isn't set yet, wait until rc's ntp signals us to start validating time */
@@ -2442,10 +2443,12 @@ void add_ip6_lanaddr(void)
 {
 	char ip[INET6_ADDRSTRLEN + 4];
 	const char *p;
+	int prefix_len;
 
 	p = ipv6_router_address(NULL);
 	if (*p) {
-		snprintf(ip, sizeof(ip), "%s/%d", p, nvram_get_int(ipv6_nvname("ipv6_prefix_length")) ? : 64);
+		prefix_len = nvram_get_int(ipv6_nvname("ipv6_prefix_length"));
+		snprintf(ip, sizeof(ip), "%s/%d", p, (prefix_len > 64 ? prefix_len : 64));
 		eval("ip", "-6", "addr", "add", ip, "dev", nvram_safe_get("lan_ifname"));
 		if (!nvram_match(ipv6_nvname("ipv6_rtr_addr"), (char*)p))
 			nvram_set(ipv6_nvname("ipv6_rtr_addr"), (char*)p);
@@ -4788,6 +4791,10 @@ start_ddns(char *caller, int isAidisk)
 		service = "default@freedns.afraid.org";
 	else if (strcmp(server, "FREEMYIP.COM") == 0)
 		service = "default@freemyip.com";
+	else if (strcmp(server, "PUBYUN.COM") == 0)
+		service = "dyndns@3322.org";
+	else if (strcmp(server, "DNSPOD.CN") == 0)
+		service = "dnspod.cn";
 	else if (strcmp(server, "WWW.TUNNELBROKER.NET") == 0) {
 		service = "default@tunnelbroker.net";
 		eval("iptables", "-t", "filter", "-D", "INPUT", "-p", "icmp", "-s", "66.220.2.74", "-j", "ACCEPT");
@@ -4832,6 +4839,8 @@ start_ddns(char *caller, int isAidisk)
 	}
 	else if (strcmp(server, "DOMAINS.GOOGLE.COM") == 0)
 		service = "default@domains.google.com";
+	else if (strcmp(server, "CLOUDFLARE.COM") == 0)
+		service = "cloudflare.com";
 #endif
 	else if (strcmp(server, "WWW.ORAY.COM") == 0) {
 		service = "peanuthull", asus_ddns = 2;
@@ -5365,16 +5374,6 @@ start_syslogd(void)
 			syslogd_argv[argc++] = "1024";
 		else
 #endif
-#ifdef RTCONFIG_HND_ROUTER
-#ifdef RTCONFIG_DBLOG
-		if(nvram_match("dblog_adj_syslog", "1"))
-		{
-			syslogd_argv[argc++] = "1024";
-			nvram_set("dblog_adj_syslog", "0");
-		}
-		else
-#endif /* RTCONFIG_DBLOG */
-#endif /* RTCONFIG_HND_ROUTER */
 		syslogd_argv[argc++] = nvram_safe_get("log_size");
 	}
 	if (nvram_invmatch("log_level", "")) {
@@ -6925,8 +6924,7 @@ void start_upnp(void)
 					"serial=%s\n"
 					"uuid=%s\n"
 #ifdef RTCONFIG_IGD2
-					"ipv6_disable=%s\n"
-					"lease_file6=/tmp/upnp.leases6\n"
+					"%s\n"
 #endif
 					"lease_file=%s\n",
 					get_wan_ifname(unit),
@@ -6949,7 +6947,7 @@ void start_upnp(void)
 					get_productid(),
 					nvram_get("serial_no") ? : serial, uuid,
 #ifdef RTCONFIG_IGD2
-					nvram_get_int("upnp_pinhole_enable") ? "no" : "yes",
+					nvram_get_int("upnp_pinhole_enable") ? "lease_file6=/tmp/upnp.leases6" : "",
 #endif
 					"/tmp/upnp.leases");
 
@@ -7125,8 +7123,8 @@ void start_upnp(void)
 				use_custom_config("upnp", "/etc/upnp/config");
 				run_postconf("upnp", "/etc/upnp/config");
 #ifdef RTCONFIG_IGD2
-				if (!nvram_get_int("upnp_pinhole_enable"))
-					xstart("miniupnpd", "-f", "/etc/upnp/config", "-1");
+				if (nvram_get_int("upnp_pinhole_enable"))
+					xstart("miniupnpd-igdv2", "-f", "/etc/upnp/config");
 				else
 #endif
 					xstart("miniupnpd", "-f", "/etc/upnp/config");
@@ -7147,6 +7145,10 @@ void stop_upnp(void)
 	}
 
 	killall_tk("miniupnpd");
+#ifdef RTCONFIG_IGD2
+	killall_tk("miniupnpd-igdv2");
+#endif
+
 #ifdef RTCONFIG_AUPNPC
 	stop_aupnpc();
 #endif
@@ -21025,6 +21027,10 @@ ddns_custom_updated_main(int argc, char *argv[])
 	if ((argc == 2 && !strcmp(argv[1], "1")) || (argc == 1)) {
 		nvram_set("ddns_status", "1");
 		nvram_set("ddns_updated", "1");
+#ifdef RTCONFIG_IPV6
+		if (nvram_get_int("ddns_ipv6_update"))
+			nvram_set("ddns_ipv6_updated", "1");
+#endif
 		nvram_set("ddns_return_code", "200");
 		nvram_set("ddns_return_code_chk", "200");
 		nvram_set("ddns_server_x_old", nvram_safe_get("ddns_server_x"));
