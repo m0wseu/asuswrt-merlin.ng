@@ -281,10 +281,10 @@ static int test_tls12_short_aead_record(int idx)
     if (test->cipher_type == SHORT_AEAD_RECORD_AES)
         return TEST_skip("AES is disabled");
 #endif
-#ifdef OPENSSL_NO_ARIA
-    if (test->cipher_type == SHORT_AEAD_RECORD_ARIA)
-        return TEST_skip("ARIA is disabled");
-#endif
+# #ifdef OPENSSL_NO_ARIA
+#    if (test->cipher_type == SHORT_AEAD_RECORD_ARIA)
+#        return TEST_skip("ARIA is disabled");
+# #endif
 #if defined(OPENSSL_NO_CHACHA) || defined(OPENSSL_NO_POLY1305) \
     || defined(OPENSSL_NO_EC)
     if (test->cipher_type == SHORT_AEAD_RECORD_CHACHA)
