@@ -121,6 +121,13 @@
 
 #include <webapi.h>
 
+/* Allow linking if the bwdpi/eula implementation is not present */
+__attribute__((weak)) void init_asus_pp_eula(void)
+{
+    /* no-op stub if not provided elsewhere */
+}
+
+
 #ifdef RTCONFIG_TCODE
 extern int noasusddns(void);
 #endif
