@@ -1,12 +1,6 @@
 
 include ../common.mak
 
-/* Allow linking if the bwdpi/eula implementation is not present */
-__attribute__((weak)) void init_asus_pp_eula(void)
-{
-    /* no-op stub if not provided elsewhere */
-}
-
 ifeq ($(HND_ROUTER_AX),y)
 ifeq ($(BRCM_CHIP),$(filter $(BRCM_CHIP),4908 4912))
 CFLAGS += -DBCM49XX
