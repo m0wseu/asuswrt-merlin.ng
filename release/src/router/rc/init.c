@@ -29,6 +29,13 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <sys/resource.h>
+
+/* Allow linking if the bwdpi/eula implementation is not present */
+__attribute__((weak)) void init_asus_pp_eula(void)
+{
+    /* no-op stub if not provided elsewhere */
+}
+
 #ifdef LINUX26
 #if defined(RTCONFIG_HND_ROUTER_AX_6756)
 #include <sys/sysmacros.h>
