@@ -71,7 +71,7 @@ void nvram_modify_log(const char *name, const char *value)
     /* no-op */
 }
 
-void handle_nvram_modify_log(void)
+void handle_nvram_modify_log(void *obj, ...)
 {
     /* no-op */
 }
