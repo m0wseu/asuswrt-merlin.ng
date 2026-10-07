@@ -76,7 +76,7 @@ void handle_nvram_modify_log(void *obj, ...)
     /* no-op */
 }
 
-extern void set_ASUS_EULA(int eula);
+extern void set_ASUS_EULA(const char *eula);
 
 
 #ifdef RTCONFIG_FANCTRL
@@ -14928,6 +14928,7 @@ int inc_uploadImg(FILE * stream, int *len, uint32 *imageLen)
 	char boundary[POST_BOUNDARY_LENGTH]={0};
 	char *pdest = NULL;	
 	imgutil_open_parms_t;
+	imgutil_open_parms_t img_parms;
 	imgutil_open_parms_t openParams;
 	unsigned int uploadSize = 0;
 	bool endBoundaryFound=FALSE;
