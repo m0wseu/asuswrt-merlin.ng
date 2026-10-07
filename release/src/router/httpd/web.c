@@ -14927,9 +14927,9 @@ int inc_uploadImg(FILE * stream, int *len, uint32 *imageLen)
 	int boundaryLen = -1;
 	char boundary[POST_BOUNDARY_LENGTH]={0};
 	char *pdest = NULL;	
-	imgutil_open_parms_t;
-	imgutil_open_parms_t img_parms;
-	imgutil_open_parms_t openParams;
+	// imgutil_open_parms_t;
+	// imgutil_open_parms_t img_parms;
+	// imgutil_open_parms_t openParams;
 	unsigned int uploadSize = 0;
 	bool endBoundaryFound=FALSE;
 	uint32 sleepCount = 0;
