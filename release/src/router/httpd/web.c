@@ -76,6 +76,9 @@ void handle_nvram_modify_log(void *obj, ...)
     /* no-op */
 }
 
+extern void set_ASUS_EULA(int eula);
+
+
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
