@@ -175,6 +175,10 @@ typedef unsigned long long u64;
 #include <qca.h>
 #endif
 
+#ifdef BIT
+#undef BIT
+#endif
+
 #ifdef RTCONFIG_CFGSYNC
 #include <cfg_param.h>
 #include <cfg_slavelist.h>
@@ -249,11 +253,18 @@ static void do_jffsupload_post(char *url, FILE *stream, int len, char *boundary)
 
 #ifdef RTCONFIG_HND_ROUTER_AX_6756
 #include "bcm_flashutil.h"
+#ifdef CRC_LEN
+#undef CRC_LEN
+#endif
 #include "bcm_imgutil_api.h"
 #include "cms_retcodes.h"
 //#include "bcm_hwdefs.h"
 #define BOOT_SET_NEW_IMAGE          '0'
 #define BOOT_SET_NEW_IMAGE_ONCE     '2'
+#endif
+
+#ifdef MAX_NAMELEN
+#undef MAX_NAMELEN
 #endif
 
 #ifdef RTCONFIG_COMFW
