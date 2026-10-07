@@ -76,11 +76,6 @@ void handle_nvram_modify_log(void)
     /* no-op */
 }
 
-static void __silence_unused(void)
-{
-    (void)smart_connect_nvsuffix_list;
-}
-
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
