@@ -29,6 +29,13 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <sys/resource.h>
+
+/* Allow linking if the bwdpi/eula implementation is not present */
+__attribute__((weak)) void init_asus_pp_eula(void)
+{
+    /* no-op stub if not provided elsewhere */
+}
+
 #ifdef LINUX26
 #if defined(RTCONFIG_HND_ROUTER_AX_6756)
 #include <sys/sysmacros.h>
@@ -497,7 +504,7 @@ misc_ioctrl(void)
 #if defined(RTAX58U_V2) || defined(GTAX6000) || defined(RTAX3000N) || defined(BR63) || defined(RTAX82U_V2) || defined(TUFAX5400_V2) || defined(RTAX88U_PRO) || defined(RTAX5400)
 			wan_phy_led_pinmux(0);
 #endif
-			led_control(LED_WAN_NORMAL, LED_ON);
+			led_control(LED_WAN_NORMAL, nvram_get_int("AllLED") ? LED_ON : LED_OFF);
 #endif
 			return;
 #endif
@@ -516,7 +523,7 @@ misc_ioctrl(void)
 				if (nvram_get_int("wanduck_down"))
 					return;
 
-				led_control(LED_WAN, LED_ON);
+				led_control(LED_WAN, nvram_get_int("AllLED") ? LED_ON : LED_OFF);
 #ifdef HND_ROUTER
 #ifndef GTAC2900
 #if defined(RTAX58U_V2) || defined(GTAX6000) || defined(TUFAX3000_V2) || defined(RTAXE7800) || defined(RTAX3000N) || defined(BR63) || defined(RTAX82U_V2) || defined(TUFAX5400_V2) || defined(RTAX88U_PRO) || defined(RTAX5400)
@@ -536,11 +543,12 @@ misc_ioctrl(void)
 #if defined(RTAX58U_V2) || defined(GTAX6000) || defined(RTAX3000N) || defined(BR63) || defined(RTAX82U_V2) || defined(TUFAX5400_V2) || defined(RTAX88U_PRO) || defined(RTAX5400)
 				wan_phy_led_pinmux(0);
 #else
-				led_control(LED_WAN_NORMAL, LED_ON);
+				led_control(LED_WAN_NORMAL, nvram_get_int("AllLED") ? LED_ON : LED_OFF);
 #endif
 			}
 #endif
 #endif
+			if (!nvram_get_int("AllLED")) setAllLedOff();
 			break;
 #if defined(RTAX86U_PRO)
 		case MODEL_RTAX86U_PRO:
@@ -19073,9 +19081,7 @@ int init_nvram2(void)
 #endif /* AMAS */
 #endif /* CFGSYNC */
 #ifdef RTCONFIG_AMAS
-#ifdef RTCONFIG_VIF_ONBOARDING
-	nvram_unset("obvif_set");
-#endif
+	nvram_unset("cp_restart");
 #endif
 #if defined(RTCONFIG_WIFI_DRV_DISABLE) /* for IPQ40XX */
 	if (nvram_match("disableWifiDrv_fac", "1"))
@@ -19125,10 +19131,10 @@ int init_nvram2(void)
 #if defined(RTAC68U) || defined(RTCONFIG_FORCE_AUTO_UPGRADE)
 		nvram_set_int("auto_upgrade", 0);
 #endif
-#ifdef RTCONFIG_FTP_SSL
-		// The ftp_tls is enabled by default when upgrading or downgrading the version.
-		nvram_set("ftp_tls", "1");
-#endif
+//#ifdef RTCONFIG_FTP_SSL
+//		// The ftp_tls is enabled by default when upgrading or downgrading the version.
+//		nvram_set("ftp_tls", "1");
+//#endif
 	}
 
 #ifdef RTCONFIG_AUTO_FW_UPGRADE
@@ -19251,6 +19257,7 @@ int init_nvram2(void)
 	}
 
 	detect_vul_scan();
+	init_asus_pp_eula();
 
 	return 0;
 }  // end of init_nvram2
