@@ -3,6 +3,8 @@ include ../common.mak
 CFLAGS += $(if $(RTCONFIG_DEBUG),-g,-Os) -Wall $(EXTRACFLAGS)
 CFLAGS += $(PRIVATE_EXTRACFLAGS)
 CFLAGS += -I$(SRCBASE) -I.
+CFLAGS += -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-const-variable -Wno-error=return-type
+
 ifeq ($(RTCONFIG_BCM7),y)
 CFLAGS += -I$(SRCBASE)/../../dhd/src/wl/exe/
 endif
