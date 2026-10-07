@@ -65,20 +65,6 @@
 #include <timezone.h>
 #include <nvram_config.h>
 
-/* Fallback stubs for NVRAM modification logging */
-void nvram_modify_log(const char *name, const char *value)
-{
-    /* no-op */
-}
-
-void handle_nvram_modify_log(void *obj, ...)
-{
-    /* no-op */
-}
-
-extern void set_ASUS_EULA(const char *eula);
-
-
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
@@ -270,6 +256,19 @@ static void do_jffsupload_post(char *url, FILE *stream, int len, char *boundary)
 #ifdef RTCONFIG_COMFW
 #include <comfw.h>
 #endif
+
+/* Put after all #include lines in web.c */
+int nvram_modify_log(char *name, char *new, char *old, struct json_object *nvram_modify_obj)
+{
+    return 0;
+}
+
+void handle_nvram_modify_log(void *obj, ...)
+{
+    /* no-op */
+}
+
+extern void set_ASUS_EULA(const char *eula);
 
 extern int ej_wl_sta_list_2g(int eid, webs_t wp, int argc, char_t **argv);
 extern int ej_wl_sta_list_5g(int eid, webs_t wp, int argc, char_t **argv);
