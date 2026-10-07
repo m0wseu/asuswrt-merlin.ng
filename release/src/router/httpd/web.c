@@ -21449,7 +21449,7 @@ login_cgi(webs_t wp, char_t *url, int auth_version)
 		HTTPD_DBG("authfail: login_error_status = %d\n", login_error_status);
 		if(fromapp_flag != 0){
 			if(login_error_status == LOGINLOCK)
-				websWrite(wp, "{\n\"error_status\":\"%d\",\"remaining_lock_time\":\"%ld\",\"lock_version\":\"%d\"\n}\n", login_error_status, max_lock_time, HTTPD_LOCK_VERSION);
+				websWrite(wp, "{\n\"error_status\":\"%d\",\"remaining_lock_time\":\"%d\",\"lock_version\":\"%d\"\n}\n", login_error_status, max_lock_time, HTTPD_LOCK_VERSION);
 			else
 				websWrite(wp, "{\n\"error_status\":\"%d\", \"captcha_on\":\"%d\", \"last_time_lock_warning\":\"%d\"\n}\n", login_error_status, captcha_on(), last_time_lock_warning());
 		}else{
