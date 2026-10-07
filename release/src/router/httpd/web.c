@@ -65,6 +65,18 @@
 #include <timezone.h>
 #include <nvram_config.h>
 
+/* Fallback stubs for NVRAM modification logging */
+void nvram_modify_log(const char *name, const char *value)
+{
+    /* no-op */
+}
+
+void handle_nvram_modify_log(void)
+{
+    /* no-op */
+}
+
+
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
