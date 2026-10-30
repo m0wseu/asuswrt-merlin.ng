@@ -404,3 +404,7 @@ endif
 	@$(CC) $(CFLAGS) -M $< > $@
 
 -include $(OBJS:%.o=.%.depend)
+
+override CFLAGS += -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-const-variable -Wno-return-type
+override CFLAGS += -Wno-error -Wno-discarded-qualifiers -Wno-misleading-indentation
+override CFLAGS += -Wno-error -Wno-pointer-compare
