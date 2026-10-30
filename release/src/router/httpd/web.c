@@ -65,19 +65,6 @@
 #include <timezone.h>
 #include <nvram_config.h>
 
-/* Put after all #include lines in web.c */
-int nvram_modify_log(char *name, char *new, char *old, struct json_object *nvram_modify_obj)
-{
-    return 0;
-}
-
-void handle_nvram_modify_log(void *obj, ...)
-{
-    /* no-op */
-}
-
-extern void set_ASUS_EULA(const char *eula);
-
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
@@ -135,6 +122,19 @@ typedef unsigned long long u64;
 #include <sys/sysinfo.h>
 #include <httpd.h>
 #include <json.h>
+
+/* Put after all #include lines in web.c */
+int nvram_modify_log(char *name, char *new, char *old, struct json_object *nvram_modify_obj)
+{
+    return 0;
+}
+
+void handle_nvram_modify_log(void *obj, ...)
+{
+    /* no-op */
+}
+
+extern void set_ASUS_EULA(const char *eula);
 
 #ifdef RTCONFIG_DSL
 #include "web-dsl.h"
@@ -252,8 +252,8 @@ static void do_jffsupload_post(char *url, FILE *stream, int len, char *boundary)
 
 #ifdef RTCONFIG_HND_ROUTER_AX_6756
 #include "bcm_flashutil.h"
-#ifdef CRC LEN
-#undef CRC LEN
+#ifdef CRC_LEN
+#undef CRC_LEN
 #endif
 #include "bcm_imgutil_api.h"
 #include "cms_retcodes.h"
@@ -262,8 +262,8 @@ static void do_jffsupload_post(char *url, FILE *stream, int len, char *boundary)
 #define BOOT_SET_NEW_IMAGE_ONCE     '2'
 #endif
 
-#ifdef MAX NAMELEN
-#undef MAX NAMELEN
+#ifdef MAX_NAMELEN
+#undef MAX_NAMELEN
 #endif
 
 #ifdef RTCONFIG_COMFW
