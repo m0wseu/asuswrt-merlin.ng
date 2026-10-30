@@ -65,6 +65,19 @@
 #include <timezone.h>
 #include <nvram_config.h>
 
+/* Put after all #include lines in web.c */
+int nvram_modify_log(char *name, char *new, char *old, struct json_object *nvram_modify_obj)
+{
+    return 0;
+}
+
+void handle_nvram_modify_log(void *obj, ...)
+{
+    /* no-op */
+}
+
+extern void set_ASUS_EULA(const char *eula);
+
 #ifdef RTCONFIG_FANCTRL
 #include <wlutils.h>
 #endif
