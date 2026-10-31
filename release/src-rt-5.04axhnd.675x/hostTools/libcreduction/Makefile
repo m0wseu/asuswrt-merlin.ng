@@ -40,7 +40,7 @@ SHLIBS32 := $(shell find -L $(BIN_INSTALL_DIRS) $(INSTALL_DIR)/lib $(INSTALL_DIR
 
 ifneq ($(SHLIBS32),)
 SHLIBS32 := $(shell find -L $(BIN_INSTALL_DIRS) $(INSTALL_DIR)/lib $(INSTALL_DIR)/usr/lib -type f | file -f - \
-             | grep "ELF 32-bit" | cut -d':' -f1 | xargs $(READELF) -d | grep NEEDED \
+             | grep "ELF 32-bit" | cut -d':' -f1 | xargs $(READELF) -d | grep 'NEEDED.*\[.*\]' \
 	     | cut -d'[' -f2 | sed -e 's/]//g' | sort | uniq)
 endif
 
@@ -52,7 +52,7 @@ SHLIBS64 := $(shell find -L $(INSTALL_DIR) -type f | file -f - \
 
 ifneq ($(SHLIBS64),)
 #SHLIBS64 := $(shell find -L $(BIN_INSTALL_DIRS) $(INSTALL_DIR)/lib $(INSTALL_DIR)/usr/lib -type f | file -f - \
-             | grep "ELF 64-bit" | cut -d':' -f1 | xargs $(READELF) -d | grep NEEDED \
+             | grep "ELF 64-bit" | cut -d':' -f1 | xargs $(READELF) -d | grep 'NEEDED.*\[.*\]' \
 	     | cut -d'[' -f2 | sed -e 's/]//g' | sort | uniq)
 SHLIBS64 := $(shell find -L $(INSTALL_DIR) -type f | file -f - \
              | grep "ELF 64-bit" | cut -d':' -f1 | xargs $(READELF) -d | grep Shared \
@@ -241,11 +241,11 @@ print_libs:
 	@echo "Installing C run-time library..."
 	@if [ -n "$(SHLIBS32)" ]; then \
 	    echo "######### All 32-bit required shared libs #########"; \
-	    echo $(SHLIBS32); \
+	    echo "$(SHLIBS32)"; \
 	fi
 	@if [ -n "$(SHLIBS64)" ]; then \
 	    echo "######### All 64-bit required shared libs #########"; \
-	    echo $(SHLIBS64); \
+	    echo "$(SHLIBS64)"; \
 	fi
 
 all install: print_libs

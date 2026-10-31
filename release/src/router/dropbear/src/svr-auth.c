@@ -99,11 +99,9 @@ void recv_msg_userauth_request() {
 	methodname = buf_getstring(ses.payload, &methodlen);
 
 	/* only handle 'ssh-connection' currently */
-	if (servicelen != SSH_SERVICE_CONNECTION_LEN
+	if (!(servicelen == SSH_SERVICE_CONNECTION_LEN
 			&& (strncmp(servicename, SSH_SERVICE_CONNECTION,
-					SSH_SERVICE_CONNECTION_LEN) != 0)) {
-		
-		/* TODO - disconnect here */
+					SSH_SERVICE_CONNECTION_LEN) == 0))) {
 		m_free(username);
 		m_free(servicename);
 		m_free(methodname);
@@ -447,7 +445,7 @@ void send_msg_userauth_failure(int partial, int incrfail) {
 		ses.authstate.failcount++;
 	}
 
-	if (ses.authstate.failcount >= svr_opts.maxauthtries) {
+	if (ses.authstate.failcount > svr_opts.maxauthtries) {
 		char * userstr;
 		/* XXX - send disconnect ? */
 		TRACE(("Max auth tries reached, exiting"))
@@ -481,11 +479,7 @@ void send_msg_userauth_success() {
 #if DROPBEAR_SVR_DROP_PRIVS
 	/* Drop privileges as soon as authentication has happened. */
 	svr_switch_user();
-#endif
-	ses.connect_time = 0;
 
-
-#if DROPBEAR_SVR_DROP_PRIVS
 	/* If running as the user, we can rely on the OS
 	 * to limit allowed ports */
 	ses.allowprivport = 1;
@@ -538,8 +532,7 @@ void svr_switch_user(void) {
 
 #if DROPBEAR_SVR_DROP_PRIVS
 		/* Retain utmp saved group so that wtmp/utmp can be written */
-		int ret = utmp_gid(&svr_ses.utmp_gid);
-		if (ret == DROPBEAR_SUCCESS) {
+		if (utmp_gid(&svr_ses.utmp_gid) == DROPBEAR_SUCCESS) {
 			/* Set saved gid to utmp so that it can be
 			 * restored for login_logout() etc. This saved
 			 * group is cleared by the OS on execve() */

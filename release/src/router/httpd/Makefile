@@ -252,6 +252,10 @@ endif
 CFLAGS += -I$(TOP)/json-c
 LIBS += -L$(TOP)/json-c/.libs -ljson-c
 
+ifeq ($(RTCONFIG_OPENSSL35),y)
+LIBS += -L$(TOP)/openssl11-compat -l:libcrypto.so.1.1 -l:libssl.so.1.1
+endif
+
 ifeq ($(RTCONFIG_BWDPI),y)
 LIBS += -L$(TOP)/bwdpi_source/asus -lbwdpi
 LIBS += -L$(TOP)/bwdpi_source/asus_sql -lbwdpi_sql
@@ -400,3 +404,7 @@ endif
 	@$(CC) $(CFLAGS) -M $< > $@
 
 -include $(OBJS:%.o=.%.depend)
+
+override CFLAGS += -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-const-variable -Wno-return-type
+override CFLAGS += -Wno-error -Wno-discarded-qualifiers -Wno-misleading-indentation
+override CFLAGS += -Wno-error -Wno-pointer-compare
