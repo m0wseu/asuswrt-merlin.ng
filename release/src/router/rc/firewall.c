@@ -1757,6 +1757,46 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 		char *net = nvram_get("chilli_net")? : nvram_default_get("chilli_net");	/* 192.168.182.0/24 */
 
 		fprintf(fp, "-I PREROUTING 1 --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 3990\n", net);
+#ifdef RTCONFIG_MULTILAN_CFG
+		MTLAN_T *pmtl = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+		size_t mtl_sz = 0;
+		CP_TYPE_RL *cp_type_rl = (CP_TYPE_RL *)INIT_MTLAN(sizeof(CP_TYPE_RL));
+		int cp_type = -1, i = 0;
+		char *sub_ip = NULL;
+		//get enabled cp_idx from sdn_rl
+		if(pmtl)
+		{
+			if(!get_mtlan(pmtl, &mtl_sz)){
+				FREE_MTLAN((void *)pmtl);
+				if(cp_type_rl) FREE_MTLAN((void *)cp_type_rl);
+				fclose(fp);
+				return;
+			}
+			for(i = 0; i < mtl_sz; ++i)
+			{
+				if((pmtl[i].enable == 1) && (pmtl[i].sdn_t.cp_idx > 0) && (cp_type_rl)){
+					
+					if(!get_cp_type_byidx(pmtl[i].sdn_t.cp_idx, cp_type_rl)){
+						FREE_MTLAN((void *)cp_type_rl);
+						FREE_MTLAN((void *)pmtl);
+						fclose(fp);
+						return;
+					}
+					cp_type = cp_type_rl->cp_type;
+					if(cp_type == 2){
+						sub_ip = pmtl[i].nw_t.addr;
+						break;
+					}
+				}
+				
+			}
+		}
+		if(sub_ip){
+			fprintf(fp, "-I PREROUTING 2 --src %s --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 8083\n", net, sub_ip);
+		}
+		if(pmtl) FREE_MTLAN((void *)pmtl);
+		if(cp_type_rl) FREE_MTLAN((void *)cp_type_rl);
+#else
 		fprintf(fp, "-I PREROUTING 2 --src %s --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 8083\n", net, lan_ip);
 //	 	fprintf(fp, "-I PREROUTING 2 --src 192.168.182.0/24 --dst 192.168.182.1 -p tcp --dport 50000 -j DNAT --to %s:8082\n", lan_ip);
 	}
@@ -1764,6 +1804,46 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 		char *net = nvram_get("cp_net")? : nvram_default_get("cp_net");		/* 192.168.183.0/24 */
 
 		fprintf(fp, "-I PREROUTING 1 --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 3998\n", net);
+#ifdef RTCONFIG_MULTILAN_CFG
+		MTLAN_T *pmtl = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+		size_t mtl_sz = 0;
+		CP_TYPE_RL *cp_type_rl = (CP_TYPE_RL *)INIT_MTLAN(sizeof(CP_TYPE_RL));
+		int cp_type = -1, i = 0;
+		char *sub_ip = NULL;
+		//get enabled cp_idx from sdn_rl
+		if(pmtl)
+		{
+			if(!get_mtlan(pmtl, &mtl_sz)){
+				FREE_MTLAN((void *)pmtl);
+				if(cp_type_rl) FREE_MTLAN((void *)cp_type_rl);
+				fclose(fp);
+				return;
+			}
+			for(i = 0; i < mtl_sz; ++i)
+			{
+				if((pmtl[i].enable == 1) && (pmtl[i].sdn_t.cp_idx > 0) && (cp_type_rl)){
+					
+					if(!get_cp_type_byidx(pmtl[i].sdn_t.cp_idx, cp_type_rl)){
+						FREE_MTLAN((void *)cp_type_rl);
+						FREE_MTLAN((void *)pmtl);
+						fclose(fp);
+						return;
+					}
+					cp_type = cp_type_rl->cp_type;
+					if(cp_type == 1){
+						sub_ip = pmtl[i].nw_t.addr;
+						break;
+					}
+				}
+				
+			}
+		}
+		if(sub_ip){
+			fprintf(fp, "-I PREROUTING 2 --src %s --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 8083\n", net, sub_ip);
+		}
+		if(pmtl) FREE_MTLAN((void *)pmtl);
+		if(cp_type_rl) FREE_MTLAN((void *)cp_type_rl);
+#else
 		fprintf(fp, "-I PREROUTING 2 --src %s --dst %s -p tcp --dport 80 -j REDIRECT --to-ports 8083\n", net, lan_ip);
 //	 	fprintf(fp, "-I PREROUTING 2 --src 192.168.182.0/24 --dst 192.168.182.1 -p tcp --dport 50000 -j DNAT --to %s:8082\n", lan_ip);
 	}
@@ -3059,9 +3139,9 @@ void set_cap_apmode_filter(void)
 	char lan_class[32];
 	int evalRet;
 
-	if((fp = fopen(cap_rules, "w")) == NULL)
-		return;
 	if (sw_mode() == SW_MODE_REPEATER)
+		return;
+	if((fp = fopen(cap_rules, "w")) == NULL)
 		return;
 
 	ip2class(nvram_safe_get("lan_ipaddr"), nvram_safe_get("lan_netmask"), lan_class);

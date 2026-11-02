@@ -56,11 +56,35 @@ int rtkswitch_ioctl(int val, int val2)
 	case 0:		/* Get LAN phy status of all LAN ports */
 #endif
 	case 1:		/* Dump all counters of the specified LAN port */
+			close(fd);
 			return rtkswitch_port_stat(val2 + 1);
 	case 100:       /* set reset pin to 0 */
 	case 101:       /* set reset pin to 1 */
 	case 7:		/* Dump L2 lookup table of specified LAN port */
+			close(fd);
 			return rtkswitch_port_mactable(val2 + 1);
+	case 19:	// IOL 100M mode
+	case 20:	// IOL 1G mode
+	case 21:	// IOL 2.5G mode1
+	case 22:	// IOL 2.5G mode2
+	case 23:	// IOL 2.5G mode3
+	case 24:	// IOL 2.5G mode4
+	case 25:	// IOL 2.5G mode5
+	case 26:	// IOL 2.5G mode6
+	case 27:	// IOL 2.5G mode7
+			close(fd);
+			return rtkswitch_testmode(val, val2, val3);
+#if defined(GTBE98) || defined(GTBE98_PRO) || defined(GTBE96) || defined(GTBE19000) || defined(RTBE92U) || defined(RTBE95U) || defined(RTBE82U) || defined(TUFBE82) || defined(RTBE58U_PRO) || defined(GTBE19000AI) || defined(GTBE96_AI)
+	case 80:	// rtl8373_setAsicReg
+	case 81:	// rtl8373_getAsicReg
+	case 82:	// rtk_port_phyReg_set
+	case 83:	// rtk_port_phyReg_get
+	case 84:	// rtk_rtl8373_sds_reg_write
+	case 85:	// rtk_rtl8373_sds_reg_read
+			close(fd);
+			return rtkswitch_regop(val, val2, val3, val4, val5);
+#endif
+	case 2:		/* Dump MAC status of specified LAN port */
 	case 3:		/* Get link status of the specified LAN port */
 	case 4:		/* Get link status of LAN ports */
 	case 9:		/* LAN / WAN partition */
