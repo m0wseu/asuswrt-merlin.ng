@@ -3140,9 +3140,9 @@ void set_cap_apmode_filter(void)
 	char lan_class[32];
 	int evalRet;
 
-	if((fp = fopen(cap_rules, "w")) == NULL)
-		return;
 	if (sw_mode() == SW_MODE_REPEATER)
+		return;
+	if((fp = fopen(cap_rules, "w")) == NULL)
 		return;
 
 	ip2class(nvram_safe_get("lan_ipaddr"), nvram_safe_get("lan_netmask"), lan_class);

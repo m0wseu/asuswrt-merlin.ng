@@ -9292,6 +9292,7 @@ void chilli_config(void)
 		fprintf(fp, "localusers %s\n", "/tmp/localusers");
 		if (!(local_fp = fopen("/tmp/localusers", "w"))) {
 			perror("/tmp/localusers");
+			fclose(fp);
 			return;
 		}
 		fprintf(local_fp, "noauth:noauth");
@@ -10328,6 +10329,538 @@ void stop_CP(void)
 
 	return;
 }
+
+#ifdef	RTCONFIG_MULTILAN_CFG
+void Checkifnamesn(char *nvifnames, char *ifname)
+{
+	char tmp_ifnames[128], *next=NULL;
+	char ifnames[16];
+	memset(tmp_ifnames, 0, sizeof(tmp_ifnames));
+	memset(ifnames, 0, sizeof(ifnames));
+	foreach(ifnames, nvifnames, next){
+		if(strcmp(ifname, ifnames))
+			strcat(tmp_ifnames, ifnames);
+			strcat(tmp_ifnames, " ");
+	}
+	strcpy(nvifnames, tmp_ifnames);
+}
+void bridge_ifByifname(char *ifs, char *brif, char *delif, int flag)
+{
+	char _ifs[64];
+	char ifname[16], lan_ifnames[128], tmp_ifname[32];
+	char brifnames[64];
+	int count=0;
+	int tmp1=0, idx=0;
+	char hw_ifname[16];
+
+
+	memset(_ifs, 0, sizeof(_ifs));
+	memset(lan_ifnames, 0, sizeof(lan_ifnames));
+	memset(brifnames, 0, sizeof(brifnames));
+	memset(hw_ifname, 0, sizeof(hw_ifname));
+	memset(tmp_ifname, 0, sizeof(tmp_ifname));
+	strcpy(lan_ifnames, nvram_safe_get("lan_ifnames"));
+	strcpy(_ifs, ifs);
+
+	char *duptr=NULL, *sptr=NULL, *dstr = NULL;
+	if(ifs){
+		int dct = 0;
+		duptr = sptr = strdup(ifs);
+		if(duptr){
+			while ((dstr = strsep(&sptr, ",")) != NULL) {
+					eval("brctl", "delif", delif, dstr);
+					eval("brctl", "addif", brif, dstr);
+					strcat(brifnames,dstr);
+					strcat(brifnames," ");
+					Checkifnamesn(lan_ifnames, dstr);
+					dct++;
+			}
+			free(duptr);
+		}
+
+
+		if(flag == 0){ //free wifi
+			nvram_set("lan1_ifnames", brifnames);
+			nvram_set("lan1_ifname", brif);
+			nvram_set("chilli_interface", brifnames);
+		}else{       //captive portal
+			nvram_set("lan2_ifnames", brifnames);
+			nvram_set("lan2_ifname", brif);
+			nvram_set("cp_interface", brifnames);
+		}
+		nvram_set("lan_ifnames", lan_ifnames);
+
+	}
+
+}
+
+int gen_chilli_ipup_script(char *type, int mtu)
+{
+	FILE *fp = NULL;
+	char file_name[32];
+
+	if (!type || strlen(type) == 0) {
+		_dprintf("[%s-%d] no type.\n", __FUNCTION__, __LINE__);
+		return 0;
+	}
+
+	snprintf(file_name, sizeof(file_name), "/tmp/ipup_%s.sh", type);
+	fp = fopen(file_name, "w+");
+	if (!fp) {
+		_dprintf("[%s-%d] open %s fail.\n", __FUNCTION__, __LINE__, file_name);
+		return 0;
+	}
+
+	fprintf(fp, "#!/bin/sh\n");
+	fprintf(fp, "ifconfig $DEV mtu %d\n", mtu);
+
+	if (fp)
+		fclose(fp);
+
+	chmod(file_name, 0777);
+
+	return 1;
+}
+
+void chilli_config_CPN(char *sn, char *dns1, char *dns2, char *sub_ip)
+{
+	FILE *fp;
+	int i, k=0;
+	char lan_ip[64];
+	//char domain[64];
+	char chilli_url[100];
+	char *tmp_str=NULL;
+	char *tmp=NULL;
+	int time=0;
+	char ip_mask[32] = "192.168.183.0/24";
+	int gw[4] = { 192, 168, 183, 1}, cidr = 24;
+
+	if (!(fp = fopen("/tmp/chilli-cp.conf", "w"))) {
+		perror("/tmp/chilli-cp.conf");
+		return;
+	}
+
+	/* Get network and generate gateway IP. */
+	strlcpy(ip_mask, nvram_get("cp_net")? : nvram_default_get("cp_net"), sizeof(ip_mask));
+	if (sscanf(ip_mask, "%d.%d.%d.%d/%d", &gw[0], &gw[1], &gw[2], &gw[3], &cidr) == 5) {
+		gw[3]++;
+	}
+
+	if(nvram_match("cp_Radius", "0")){
+		fprintf(fp, "radiusserver1 %s\n", "127.0.0.1");
+		fprintf(fp, "radiusserver2 %s\n", "127.0.0.1");
+#ifdef RTCONFIG_COOVACHILLI
+		chilli_localUser();
+		if(nvram_match("cp_authtype", "0"))
+			fprintf(fp, "localusers %s\n", "/tmp/localusers_cp");
+		else
+			fprintf(fp, "localusers %s\n", "/etc/shadow.chilli-cp");
+#endif
+	}else{
+		fprintf(fp, "radiusserver1 %s\n", nvram_get("cp_radius"));
+		fprintf(fp, "radiusserver2 %s\n", nvram_get("cp_backup"));
+		if (nvram_invmatch("cp_radiusauthport", "")){
+			fprintf(fp, "radiusauthport %s\n", nvram_get("cp_radiusauthport"));
+		}
+		if (nvram_invmatch("cp_radiusnasid", "")){
+			fprintf(fp, "radiusnasid %s\n", nvram_get("cp_radiusnasid"));
+		}
+		if (nvram_invmatch("cp_radiussecret", "")){
+			fprintf(fp, "radiussecret %s\n", nvram_get("cp_radiussecret"));
+		}
+	}
+
+	if (nvram_match("chilli_nowifibridge", "1"))
+		fprintf(fp, "dhcpif %s\n", sn);
+	else
+		fprintf(fp, "dhcpif %s\n", "br0");
+
+	memset(chilli_url,0, sizeof(chilli_url));
+#ifdef RTCONFIG_MULTILAN_CFG
+	sprintf(chilli_url, "%s://%s:8083/Uam", nvram_safe_get("cp_protocol"), sub_ip);
+#else		
+	memset(lan_ip, 0, sizeof(lan_ip));
+	strcpy(lan_ip, nvram_safe_get("lan_ipaddr"));
+
+	if(!nvram_match("chilli_url", lan_ip))
+		nvram_set("chilli_url", lan_ip);
+	//sprintf(chilli_url, "https://%s/Uam", lan_ip);
+	sprintf(chilli_url, "%s://%s:8083/Uam", nvram_safe_get("cp_protocol"), lan_ip);
+#endif	
+	fprintf(fp, "uamserver %s\n", chilli_url);
+	/*memset(domain, 0, sizeof(domain));
+	strcpy(domain, nvram_safe_get("brdName"));
+
+	if(strlen(domain) > 0 ){
+		while(domain[k] != '\0'){
+			domain[k]=tolower(domain[k]);
+			k++;
+		}
+		if(strlen(domain) > 0){
+			fprintf(fp, "domain %s\n", domain);
+			fprintf(fp, "domaindnslocal\n");
+		}
+	}*/
+	fprintf(fp, "unixipc %s\n", "chilli-cp.ipc");
+	fprintf(fp, "cmdsocketport %s\n", "42425");
+// #ifdef RTCONFIG_IPV6
+// 	if (ipv6_enabled()) fprintf(fp, "ipv6\n");
+// #endif
+	fprintf(fp, "uamport %s\n", "3998");
+	fprintf(fp, "tundev %s\n", "tun23");
+	//fprintf(fp, "uamaliasip %d.%d.%d.%d\n", gw[0], gw[1], gw[2], gw[3]);
+	fprintf(fp, "redirssl\n");
+	fprintf(fp, "sslcertfile %s\n", "/etc/cert.pem");
+	fprintf(fp, "sslkeyfile %s\n", "/etc/key.pem");
+	if((time=nvram_get_int("cp_authtime")) > 0)
+		fprintf(fp, "challengetimeout2 %d\n", time);
+	tmp_str=nvram_safe_get("cp_awaytime");
+	if(strcmp(tmp_str,""))
+		fprintf(fp, "defidletimeout %lu\n", strtoul(tmp_str, &tmp, 10));
+	tmp_str=nvram_safe_get("cp_sessiontime");
+	if(strcmp(tmp_str,""))
+		fprintf(fp, "defsessiontimeout %lu\n", strtoul(tmp_str, &tmp, 10));
+
+	
+	if((dns1 != NULL && *dns1) && (dns2 == NULL || !*dns2 || strlen(dns2)<7))
+		fprintf(fp, "dns1 %s\n", dns1);
+	else if((dns2 != NULL && *dns2) && (dns1 == NULL || !*dns1 || strlen(dns1)<7))
+		fprintf(fp, "dns2 %s\n", dns2);
+	else if((dns1 == NULL || !*dns1 || strlen(dns1)<7) && (dns2 == NULL || !*dns2 || strlen(dns2)<7))
+		fprintf(fp, "dns1 %s\n", sub_ip);
+	else if((dns1 != NULL && *dns1) && (dns2 != NULL && *dns2)){
+		fprintf(fp, "dns1 %s\n", dns1);
+		fprintf(fp, "dns2 %s\n", dns2);
+	}
+
+	char *enc_value =  nvram_safe_get("cp_uamsecret");
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+	int declen = strlen(enc_value);
+	char *dec_passwd = NULL;
+	dec_passwd = malloc(declen);
+	if(dec_passwd){
+		pw_dec(enc_value, dec_passwd, declen, 1);
+		enc_value = dec_passwd;
+	}
+#endif
+	if (nvram_invmatch("cp_uamsecret", ""))
+		fprintf(fp, "uamsecret %s\n", enc_value);
+	if (nvram_invmatch("cp_uamanydns", "0"))
+		fprintf(fp, "uamanydns\n");
+	if (nvram_invmatch("cp_uamallowed", "")){
+		char *tmp=NULL, *allowed_domain=NULL, *allowed_IP=NULL;
+		char *sep=NULL, *tmpStr=NULL;
+		int length=0;
+		tmpStr=tmp=strdup(nvram_get("cp_uamallowed"));
+		length=strlen(tmp)+1;
+		allowed_domain=calloc(length+1, sizeof(char));
+		allowed_IP=calloc(length+1, sizeof(char));
+		while((sep=strsep(&tmpStr, ",")) != NULL ){
+			if(*sep !='\0'){
+				if(illegal_ipv4_address(sep) !=0){
+					if(!strncmp(sep, "www.", 4)) sep+=4;
+					strncat(allowed_domain, sep, length-strlen(allowed_domain)-1);
+					strncat(allowed_domain, ",", length-strlen(allowed_domain)-1);
+				}else{
+					strncat(allowed_IP, sep, length-strlen(allowed_IP)-1);
+					strncat(allowed_IP, ",", length-strlen(allowed_IP)-1);
+				}
+			}
+		}
+		if(strlen(allowed_IP) > 0) fprintf(fp, "uamallowed %s\n", allowed_IP);
+		if(strlen(allowed_domain) > 0) fprintf(fp, "uamdomain %s\n", allowed_domain);
+		free(tmp);
+		free(allowed_domain);
+		free(allowed_IP);
+	}
+	if (nvram_match("cp_nowifibridge", "1"))
+	{
+		if (nvram_invmatch("cp_net", ""))
+			fprintf(fp, "net %s\n", nvram_get("cp_net"));
+	}
+	else
+		fprintf(fp, "net %s\n", ip_mask);
+	if (nvram_match("cp_macauth", "1")) {
+		fprintf(fp, "macauth\n");
+		if (strlen(nvram_safe_get("cp_macpasswd")) > 0)
+			fprintf(fp, "macpasswd %s\n", nvram_get("cp_macpasswd"));
+		else
+			fprintf(fp, "macpasswd password\n");
+	}
+	if (nvram_match("cp_802.1Xauth", "1"))
+		fprintf(fp, "eapolenable\n");
+
+	tmp_str=nvram_safe_get("cp_bandwidthMaxUp");
+	if ((strcmp(tmp_str,"")!=0) && (strcmp(tmp_str,"0")!=0)){
+		fprintf(fp, "defbandwidthmaxup %ld\n", strtol(tmp_str, NULL, 10)*1024);
+	}
+	tmp_str=nvram_safe_get("cp_bandwidthMaxDown");
+	if ((strcmp(tmp_str,"")!=0) && (strcmp(tmp_str,"0")!=0)){
+		fprintf(fp, "defbandwidthmaxdown %ld\n", strtol(tmp_str, NULL, 10)*1024);
+	}
+	if (nvram_invmatch("cp_lease", ""))
+			fprintf(fp, "lease %s\n", nvram_get("cp_lease"));
+
+	if (nvram_invmatch("cp_additional", "")) {
+		char *add = nvram_safe_get("chilli_additional");
+
+		i = 0;
+		do {
+			if (add[i] != 0x0D)
+				fprintf(fp, "%c", add[i]);
+		}
+		while (add[++i]);
+		i = 0;
+		int a = 0;
+		char *filter = strdup(add);
+
+		do {
+			if (add[i] != 0x0D)
+				filter[a++] = add[i];
+		}
+		while (add[++i]);
+
+		filter[a] = 0;
+		if (strcmp(filter, add)) {
+			nvram_set("cp_additional", filter);
+			nvram_commit();
+		}
+		free(filter);
+	}
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+	if(dec_passwd) free(dec_passwd);
+#endif
+
+#ifdef RTCONFIG_MULTILAN_CFG
+	if (gen_chilli_ipup_script("cp", nvram_get_int("cp_mtu")))
+		fprintf(fp, "ipup /tmp/ipup_cp.sh\n");
+#endif	/* RTCONFIG_MULTILAN_CFG */
+
+	fflush(fp);
+	fclose(fp);
+
+	return;
+}
+void chilli_confign(char *sn, char *dns1, char *dns2, char *sub_ip)
+{
+	FILE *fp;
+	FILE *local_fp;
+	int i, k=0;
+	char lan_ip[64];
+	char chilli_url[100];
+	//char domain[64];
+	char *tmp_str=NULL;
+	char *tmp=NULL, *passwd=NULL;;
+	int time=0;
+	char ip_mask[32] = "192.168.182.0/24";
+	int gw[4] = { 192, 168, 182, 1}, cidr = 24;
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+	char *dec_passwd = NULL, *dec_passwd2 = NULL;
+#endif
+	if (!(fp = fopen("/tmp/chilli.conf", "w"))) {
+		perror("/tmp/chilli.conf");
+		return;
+	}
+
+	/* Get network and generate gateway IP. */
+	strlcpy(ip_mask, nvram_get("chilli_net")? : nvram_default_get("chilli_net"), sizeof(ip_mask));
+	if (sscanf(ip_mask, "%d.%d.%d.%d/%d", &gw[0], &gw[1], &gw[2], &gw[3], &cidr) == 5) {
+		gw[3]++;
+	}
+
+	//if(nvram_match("chilli_Radius", "1")){
+		fprintf(fp, "radiusserver1 %s\n", nvram_get("chilli_radius"));
+		fprintf(fp, "radiusserver2 %s\n", nvram_get("chilli_backup"));
+		if (nvram_invmatch("chilli_radiusauthport", ""))
+			fprintf(fp, "radiusauthport %s\n", nvram_get("chilli_radiusauthport"));
+		//fprintf(fp, "radiussecret %s\n", nvram_get("chilli_pass"));
+		if (nvram_invmatch("chilli_radiusnasid", ""))
+			fprintf(fp, "radiusnasid %s\n", nvram_get("chilli_radiusnasid"));
+//	}else{
+	passwd = nvram_safe_get("captive_portal_passcode");
+	if(strlen(passwd) > 0){
+		chilli_localUser_passcode();
+		fprintf(fp, "localusers %s\n", "/etc/shadow.chilli");
+	}
+	else
+	{
+		fprintf(fp, "localusers %s\n", "/tmp/localusers");
+		if (!(local_fp = fopen("/tmp/localusers", "w"))) {
+			perror("/tmp/localusers");
+			fclose(fp);
+			return;
+		}
+		fprintf(local_fp, "noauth:noauth");
+		fclose(local_fp);
+	}
+		/*fprintf(fp, "localusers %s\n", "/tmp/localusers");
+		if (!(local_fp = fopen("/tmp/localusers", "w"))) {
+			perror("/tmp/localusers");
+			return;
+		}
+		passwd=nvram_safe_get("captive_portal_passcode");
+		if(strlen(passwd) >0 ) fprintf(local_fp, "noauth:%s", passwd);
+		else fprintf(local_fp, "noauth:noauth");
+		fclose(local_fp);*/
+//	}
+
+	if (nvram_match("chilli_nowifibridge", "1"))
+		fprintf(fp, "dhcpif %s\n", sn);
+	else
+		fprintf(fp, "dhcpif %s\n", "br0");
+		
+	memset(chilli_url,0, sizeof(chilli_url));
+#ifdef RTCONFIG_MULTILAN_CFG
+	sprintf(chilli_url, "%s://%s:8083/FreeUam", nvram_safe_get("chilli_protocol"), sub_ip);
+#else
+	memset(lan_ip, 0, sizeof(lan_ip));
+	strcpy(lan_ip, nvram_safe_get("lan_ipaddr"));
+
+	if(!nvram_match("chilli_url", lan_ip))
+	   nvram_set("chilli_url", lan_ip);
+	//sprintf(chilli_url, "https://%s/Uam", lan_ip);
+	sprintf(chilli_url, "%s://%s:8083/FreeUam", nvram_safe_get("chilli_protocol"), lan_ip);
+#endif
+	fprintf(fp, "uamserver %s\n", chilli_url);
+	/*memset(domain, 0, sizeof(domain));
+	strcpy(domain, nvram_safe_get("brdName"));
+
+	if(strlen(domain) > 0 ){
+		while(domain[k] != '\0'){
+			domain[k]=tolower(domain[k]);
+			k++;
+		}
+		if(strlen(domain) > 0){
+			fprintf(fp, "domain %s\n", domain);
+			fprintf(fp, "domaindnslocal\n");
+		}
+	}*/
+	fprintf(fp, "cmdsocketport %s\n", "42424");
+// #ifdef RTCONFIG_IPV6
+// 	if (ipv6_enabled()) fprintf(fp, "ipv6\n");
+// #endif
+	fprintf(fp, "tundev %s\n", "tun22");
+	//fprintf(fp, "uamaliasip %d.%d.%d.%d\n", gw[0], gw[1], gw[2], gw[3]);
+	fprintf(fp, "redirssl\n");
+	fprintf(fp, "sslcertfile %s\n", "/etc/cert.pem");
+	fprintf(fp, "sslkeyfile %s\n", "/etc/key.pem");
+	if((time=nvram_get_int("chilli_authtime")) > 0)
+		fprintf(fp, "challengetimeout2 %d\n", time);
+	tmp_str=nvram_safe_get("chilli_awaytime");
+	if(strcmp(tmp_str,""))
+		fprintf(fp, "defidletimeout %lu\n", strtoul(tmp_str, &tmp, 10));
+	tmp_str=nvram_safe_get("chilli_sessiontime");
+	if(strcmp(tmp_str,""))
+		fprintf(fp, "defsessiontimeout %lu\n", strtoul(tmp_str, &tmp, 10));
+	
+	if((dns1 != NULL && *dns1) && (dns2 == NULL || !*dns2 || strlen(dns2)<7))
+		fprintf(fp, "dns1 %s\n", dns1);
+	else if((dns2 != NULL && *dns2) && (dns1 == NULL || !*dns1 || strlen(dns1)<7))
+		fprintf(fp, "dns2 %s\n", dns2);
+	else if((dns1 == NULL || !*dns1 || strlen(dns1)<7) && (dns2 == NULL || !*dns2 || strlen(dns2)<7))
+		fprintf(fp, "dns1 %s\n", sub_ip);
+	else if((dns1 != NULL && *dns1) && (dns2 != NULL && *dns2)){
+		fprintf(fp, "dns1 %s\n", dns1);
+		fprintf(fp, "dns2 %s\n", dns2);
+	}
+
+	char *chilli_uamsecret =  nvram_safe_get("chilli_uamsecret");
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+	int declen = strlen(chilli_uamsecret);
+	dec_passwd = malloc(declen);
+	if(dec_passwd){
+		pw_dec(chilli_uamsecret, dec_passwd, declen, 1);
+		chilli_uamsecret = dec_passwd;
+	}
+#endif
+	if (nvram_invmatch("chilli_uamsecret", ""))
+		fprintf(fp, "uamsecret %s\n", chilli_uamsecret);
+	if (nvram_invmatch("chilli_uamanydns", "0"))
+		fprintf(fp, "uamanydns\n");
+	if (nvram_invmatch("chilli_uamallowed", ""))
+		fprintf(fp, "uamallowed %s\n", nvram_get("chilli_uamallowed"));
+
+	if (nvram_match("chilli_nowifibridge", "1"))
+	{
+		if (nvram_invmatch("chilli_net", ""))
+			fprintf(fp, "net %s\n", nvram_get("chilli_net"));
+	}
+	else
+		fprintf(fp, "net %s\n", ip_mask);
+	if (nvram_match("chilli_macauth", "1")) {
+		fprintf(fp, "macauth\n");
+		char *chilli_macpasswd = nvram_safe_get("chilli_macpasswd");
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+		int declen2 = strlen(chilli_macpasswd);
+		dec_passwd2 = malloc(declen2);
+		if(dec_passwd2){
+			pw_dec(chilli_macpasswd, dec_passwd2, declen2, 1);
+			chilli_macpasswd = dec_passwd2;
+		}
+#endif
+		if (strlen(chilli_macpasswd) > 0)
+			fprintf(fp, "macpasswd %s\n", chilli_macpasswd);
+		else
+			fprintf(fp, "macpasswd password\n");
+	}
+	if (nvram_match("chilli_802.1Xauth", "1"))
+		fprintf(fp, "eapolenable\n");
+
+	tmp_str=nvram_safe_get("chilli_bandwidthMaxUp");
+	if ((strcmp(tmp_str,"")!=0) && (strcmp(tmp_str,"0")!=0)){
+		fprintf(fp, "defbandwidthmaxup %ld\n", strtol(tmp_str, NULL, 10)*1024);
+	}
+	tmp_str=nvram_safe_get("chilli_bandwidthMaxDown");
+	if ((strcmp(tmp_str,"")!=0) && (strcmp(tmp_str,"0")!=0)){
+		fprintf(fp, "defbandwidthmaxdown %ld\n", strtol(tmp_str, NULL, 10)*1024);
+	}
+
+	if (nvram_invmatch("chilli_lease", ""))
+			fprintf(fp, "lease %s\n", nvram_get("chilli_lease"));
+
+	if (nvram_invmatch("chilli_additional", "")) {
+		char *add = nvram_safe_get("chilli_additional");
+
+		i = 0;
+		do {
+			if (add[i] != 0x0D)
+				fprintf(fp, "%c", add[i]);
+		}
+		while (add[++i]);
+		i = 0;
+		int a = 0;
+		char *filter = strdup(add);
+
+		do {
+			if (add[i] != 0x0D)
+				filter[a++] = add[i];
+		}
+		while (add[++i]);
+
+		filter[a] = 0;
+		if (strcmp(filter, add)) {
+			nvram_set("chilli_additional", filter);
+			nvram_commit();
+		}
+		free(filter);
+	}
+#ifdef RTCONFIG_NVRAM_ENCRYPT
+	if(dec_passwd) free(dec_passwd);
+	if(dec_passwd2) free(dec_passwd2);
+#endif
+
+#ifdef RTCONFIG_MULTILAN_CFG
+	if (gen_chilli_ipup_script("chilli", nvram_get_int("chilli_mtu")))
+		fprintf(fp, "ipup /tmp/ipup_chilli.sh\n");
+#endif	/* RTCONFIG_MULTILAN_CFG */
+
+	fflush(fp);
+	fclose(fp);
+
+	return;
+}
+#endif
+
 void Checkifnames(char *nvifnames, char *ifname)
 {
 	char tmp_ifnames[128], *next=NULL;
@@ -23167,6 +23700,197 @@ void PS_pod_main(void)
 }
 #endif
 
+#ifdef RTCONFIG_GETREALIP
+#define STUN_RESULT	"/tmp/stun.res"
+int realip_main(int argc, char *argv[])
+{
+	char *stun_server_list[] = {
+		"stun.l.google.com",
+		"stun.stunprotocol.org",
+		"stun4.l.google.com:19302",
+		// "stun3.l.google.com:19302",
+		// "stun2.l.google.com:19302",
+		// "stun1.l.google.com:19302",
+		"stun.pjsip.org",
+		// "stun.linphone.org",
+		// "stun.freeswitch.org",
+		// "stun.develz.org",
+		// "stun.wifirst.net",
+		// "stun.sipnet.net",
+		// "stun.sipgate.net",
+		// "stun.rolmail.net",
+		// "stun.nonoh.net",
+		// "stun.nfon.net",
+		// "stun.infra.net",
+		// "stun.dus.net",
+		""};
+	int i = 0;
+	int wan_unit;
+	char wan_prefix[16] = {0};
+	char wan_ifname[IFNAMSIZ] = {0};
+	char wan_gateway[INET_ADDRSTRLEN] = {0};
+	char stun_server[64] = {0};
+	char *stun_argv[] = {"ministun", "-t", "1000", "-c", "1"
+		, "-i", wan_ifname, stun_server
+		, NULL};
+	char buf[64] = {0};
+	char *server, *tmp_server, *port;
+	char stun_server_ip[INET_ADDRSTRLEN] = {0};
+	char table_str[8] = "main";
+#if defined(RTCONFIG_MULTIWAN_IF) || defined(RTCONFIG_DUALWAN)
+	char pref_str[8] = "30";
+#endif
+#ifdef RTCONFIG_MULTIWAN_IF
+	int is_mtwan;
+#endif
+#ifdef RTCONFIG_DUALWAN
+	int load_balance = (nvram_match("wans_mode", "lb") && get_nr_wan_unit() > 1) ? 1 : 0;
+#endif
+	int ret;
+	int success = 0;
+
+	if (argc < 2) {
+		printf("Usage: realip <wan_unit>\n");
+		return EXIT_FAILURE;
+	}
+
+	wan_unit = safe_atoi(argv[1]);
+	snprintf(wan_prefix, sizeof(wan_prefix), "wan%d_", wan_unit);
+#ifdef RTCONFIG_MULTIWAN_IF
+	is_mtwan = is_mtwan_unit(wan_unit);
+	if (is_mtwan) {
+		wan_unit = mtwan_get_real_wan(wan_unit, wan_prefix, sizeof(wan_prefix));
+		if (wan_unit < 0) {
+			printf("Get WAN(%d) dualwan_idx failed\n", safe_atoi(argv[1]));
+			return -10;
+		}
+		mtwan_get_route_table_id(wan_unit, table_str, sizeof(table_str));
+	}
+#endif
+#ifdef RTCONFIG_DUALWAN
+	if (load_balance && wan_unit < WAN_UNIT_MAX)
+		snprintf(table_str, sizeof(table_str), "%d", IP_ROUTE_TABLE_ID_DUALWAN_BASE + wan_unit * 100);
+#endif
+	if (nvram_pf_get_int(wan_prefix, "state_t") != WAN_STATE_CONNECTED) {
+		printf("WAN(%d) is not connected\n", wan_unit);
+		return -1;
+	}
+
+	while (nvram_get_int("link_internet") != 2)
+		sleep(1);
+
+	strlcpy(wan_ifname, get_wan_ifname(wan_unit), sizeof(wan_ifname));
+	strlcpy(wan_gateway, nvram_pf_safe_get(wan_prefix, "gateway"), sizeof(wan_gateway));
+
+	for (i = 0; stun_server_list[i]; i++) {
+		strlcpy(buf, stun_server_list[i], sizeof(buf));
+		server = tmp_server = buf;
+		port = NULL;
+		if (strchr(buf, ':')) {
+			server = strsep(&tmp_server, ":");
+			port = tmp_server;
+		}
+		if (resolv_addr4(server, stun_server_ip, sizeof(stun_server_ip)) < 0) {
+			printf("resolve stun server failed\n");
+			return -2;
+		}
+
+		// add stun server route
+#ifdef RTCONFIG_MULTIWAN_IF
+		if (is_mtwan)
+			eval("ip", "rule", "add", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+#ifdef RTCONFIG_DUALWAN
+		if (load_balance && wan_unit < WAN_UNIT_MAX)
+			eval("ip", "rule", "add", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+		eval("ip", "route", "add", stun_server_ip, "via", wan_gateway, "dev", wan_ifname, "table", table_str);
+
+		if (port)
+			snprintf(stun_server, sizeof(stun_server), "%s:%s", stun_server_ip, port);
+		else
+			strlcpy(stun_server, stun_server_ip, sizeof(stun_server));
+		// _dprintf("final stun server: %s\n", stun_server);
+
+		ret = _eval(stun_argv, ">"STUN_RESULT, 0, NULL);
+
+		// del stun server route
+#ifdef RTCONFIG_MULTIWAN_IF
+		eval("ip", "rule", "del", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+		eval("ip", "route", "del", stun_server_ip, "via", wan_gateway, "dev", wan_ifname, "table", table_str);
+
+		if (!ret) {
+			FILE *fp = fopen(STUN_RESULT, "r");
+			while (fp && fgets(buf, sizeof(buf), fp)) {
+				trimNL(buf);
+				if (is_valid_ip4(buf)) {
+					success = 1;
+					break;
+				}
+			}
+			if (fp)
+				fclose(fp);
+
+			if (success) {
+				printf("%s\n", buf);
+				nvram_pf_set(wan_prefix, "realip_ip", buf);
+				nvram_pf_set(wan_prefix, "realip_state", "2");
+				break;
+			}
+		}
+	}
+
+	if (!success)
+		nvram_pf_set(wan_prefix, "realip_state", "1");
+
+	unlink(STUN_RESULT);
+
+	return (success) ? 0 : -3;
+}
+#endif
+
+#ifdef RTCONFIG_FAST_ACL_SET
+void start_setacl_not_restart_wifi(void)
+{
+	int bssidx=-1;
+	int vifidx=-1;
+	int stop_flag=0;
+
+	if(nvram_safe_get("acl_tmp_bssidx") == NULL || nvram_safe_get("acl_tmp_vifidx")== NULL){
+		_dprintf("parameters for acl setting are incorrect\n");
+		return;
+	}
+
+	bssidx=nvram_get_int("acl_tmp_bssidx");
+	vifidx=nvram_get_int("acl_tmp_vifidx");
+
+	nvram_unset("acl_tmp_bssidx");
+	nvram_unset("acl_tmp_vifidx");
+
+	//if(vifidx > 0)
+	//	snprintf(prefix, sizeof(prefix), "wl%d.%d_", bssidx, vifidx);
+	//else
+	//	snprintf(prefix, sizeof(prefix), "wl%d_", bssidx);
+
+	/* set a nvram parameter to avoid watchdog restart related services before acl setting is done */
+	nvram_set_int("watchdog_wait_a_moment",1);
+	/* stop related funcions and let watchdog restart them */
+	check_stop_flag(&stop_flag);
+#ifdef BCM_BSD	
+	if(stop_flag&STOP_BSD) stop_bsd();
+#endif	
+	if(stop_flag&STOP_ROAMAST) stop_roamast();
+
+	/* sysdeps: set mac mode/list and remove */
+	set_acl_and_remove_sta(bssidx, vifidx);
+
+
+	/* unset related nvram */
+	nvram_unset("watchdog_wait_a_moment");
+
+}
+#endif //RTCONFIG_FAST_ACL_SET
 
 #if defined(RTCONFIG_HND_ROUTER_AX)
 int set_cable_media(const char *eth_inf, const char *media_type){

@@ -2673,6 +2673,7 @@ int arpcache(char *tgmac, char *tgip)
 	char header[ARP_BUFFER_LEN];
 	if (!fgets(header, sizeof(header), arpCache))
 	{
+		fclose(arpCache);
 		return -1;
 	}
 

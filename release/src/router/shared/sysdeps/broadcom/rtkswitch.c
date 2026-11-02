@@ -61,6 +61,7 @@ int rtkswitch_ioctl(int val, int val2)
 	case 101:       /* set reset pin to 1 */
 	case 7:		/* Dump L2 lookup table of specified LAN port */
 			return rtkswitch_port_mactable(val2 + 1);
+	case 2:         /* Dump MAC status of specified LAN port */
 	case 3:		/* Get link status of the specified LAN port */
 	case 4:		/* Get link status of LAN ports */
 	case 9:		/* LAN / WAN partition */
