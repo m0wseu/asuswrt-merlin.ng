@@ -170,7 +170,13 @@ fd2str(int fd)
 	size_t count = 0, n;
 
 	do {
-		buf = realloc(buf, count + 512);
+		char *tmp = realloc(buf, count + 512);
+		if (tmp == NULL) {
+			free(buf);
+			buf = NULL;
+			break;
+		}
+		buf = tmp;
 		n = read(fd, buf + count, 512);
 		if (n < 0) {
 			free(buf);
@@ -2360,7 +2366,7 @@ char *readfile(char *fname,int *fsize)
 {
  FILE *fp;
  unsigned long size,lsize;
- char *pt;
+ char *pt, *tmp;
  int len;
  char buf[100];
 
@@ -2375,14 +2381,15 @@ char *readfile(char *fname,int *fsize)
     goto sysfail;
    lsize=size;
    size+=len;
-   pt=(char *)realloc(pt,size+1);
+   tmp=(char *)realloc(pt,size+1);
+   if (!tmp)
+    goto sysfail;
+   pt=tmp;
    if (len==0)
     {
      pt[size]='\0';
      break;
     }
-   if (!pt)
-    goto sysfail;
    memcpy(pt+lsize,buf,len);
   }
  fclose(fp);
