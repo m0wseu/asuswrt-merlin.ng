@@ -121,6 +121,10 @@ typedef unsigned long long u64;
 #include <sys/shm.h>
 #include <sys/sysinfo.h>
 #include <httpd.h>
+int __attribute__((weak)) nvram_modify_log(char *name, char *new_val, char *old_val, struct json_object *nvram_modify_obj) { return 0; }
+void __attribute__((weak)) handle_nvram_modify_log(void *obj) {}
+int __attribute__((weak)) set_ASUS_EULA(const char *obj) { return 0； }
+int __attribute__((weak)) check_xss_blacklist(char *url, int flag) { return 0; }
 #include <json.h>
 
 #ifdef RTCONFIG_DSL
@@ -7940,6 +7944,7 @@ FINISH:
 
 	if(wan_ipv6_obj)
 		json_object_put(wan_ipv6_obj);
+	return ret;
 }
 
 int
@@ -21444,7 +21449,7 @@ login_cgi(webs_t wp, char_t *url, int auth_version)
 		HTTPD_DBG("authfail: login_error_status = %d\n", login_error_status);
 		if(fromapp_flag != 0){
 			if(login_error_status == LOGINLOCK)
-				websWrite(wp, "{\n\"error_status\":\"%d\",\"remaining_lock_time\":\"%ld\",\"lock_version\":\"%d\"\n}\n", login_error_status, max_lock_time, HTTPD_LOCK_VERSION);
+				websWrite(wp, "{\n\"error_status\":\"%d\",\"remaining_lock_time\":\"%ld\",\"lock_version\":\"%d\"\n}\n", login_error_status, (long)max_lock_time, HTTPD_LOCK_VERSION);
 			else
 				websWrite(wp, "{\n\"error_status\":\"%d\", \"captcha_on\":\"%d\", \"last_time_lock_warning\":\"%d\"\n}\n", login_error_status, captcha_on(), last_time_lock_warning());
 		}else{
@@ -31998,7 +32003,7 @@ ej_check_passwd_strength(int eid, webs_t wp, int argc, char **argv){
 				memset(sFwd, 0, sizeof(sFwd));
 				memset(sFwd_t, 0, sizeof(sFwd_t));
 				memset(sRev, 0, sizeof(sRev));
-				if(sAlphas+s != '\0'){
+				if(*(sAlphas+s) != '\0'){
 					strncpy(sFwd, sAlphas+s, 3);
 					strncpy(sFwd_t, sFwd, 3);
 				}
@@ -32014,7 +32019,7 @@ ej_check_passwd_strength(int eid, webs_t wp, int argc, char **argv){
 				memset(sFwd, 0, sizeof(sFwd));
 				memset(sFwd_t, 0, sizeof(sFwd_t));
 				memset(sRev, 0, sizeof(sRev));
-				if(sNumerics+s != '\0'){
+				if(*(sNumerics+s) != '\0'){
 					strncpy(sFwd, sNumerics+s, 3);
 					strncpy(sFwd_t, sFwd, 3);
 				}
@@ -32029,7 +32034,7 @@ ej_check_passwd_strength(int eid, webs_t wp, int argc, char **argv){
 				memset(sFwd, 0, sizeof(sFwd));
 				memset(sFwd_t, 0, sizeof(sFwd_t));
 				memset(sRev, 0, sizeof(sRev));
-				if(sSymbols+s != '\0'){
+				if(*(sSymbols+s) != '\0'){
 					strncpy(sFwd, sSymbols+s, 3);
 					strncpy(sFwd_t, sFwd, 3);
 				}
