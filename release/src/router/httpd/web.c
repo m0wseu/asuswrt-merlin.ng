@@ -123,7 +123,7 @@ typedef unsigned long long u64;
 #include <httpd.h>
 int __attribute__((weak)) nvram_modify_log(char *name, char *new_val, char *old_val, struct json_object *nvram_modify_obj) { return 0; }
 void __attribute__((weak)) handle_nvram_modify_log(void *obj) {}
-int __attribute__((weak)) set_ASUS_EULA(const char *obj) { return 0； }
+int __attribute__((weak)) set_ASUS_EULA(const char *obj) { return 0; }
 int __attribute__((weak)) check_xss_blacklist(char *url, int flag) { return 0; }
 #include <json.h>
 
