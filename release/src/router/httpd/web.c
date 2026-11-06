@@ -33963,8 +33963,10 @@ ej_get_cfg_clientlist(int eid, webs_t wp, int argc, char **argv){
 		memset(config_conv_buf, 0, sizeof(config_conv_buf));
 		snprintf(re_mac_file_name, sizeof(re_mac_file_name), "/tmp/%s.json", rmac_buf);
 		reMacFileObj = json_object_from_file(re_mac_file_name);
-		if (reMacFileObj) {
+		if (json_object_is_type(reMacFileObj, json_type_object)) {
 			json_object_object_foreach(reMacFileObj, key, val) {
+				if (!json_object_is_type(val, json_type_object))
+					continue;
 				reMac_misc_obj = val;
 				json_object_object_del(reMac_misc_obj, "action_script"); /* filter unnecessary info */
 				json_object_object_get_ex(reMac_misc_obj, "cfg_alias", &reMac_misc_cfg_alias);
@@ -33983,6 +33985,8 @@ ej_get_cfg_clientlist(int eid, webs_t wp, int argc, char **argv){
 			escape_json_char(config_buf, config_conv_buf, 1);
 			json_object_put(reMacFileObj);
 		}
+		else if (reMacFileObj)
+			json_object_put(reMacFileObj);
 
 		/* get capability */
 		memset(capability_buf, 0, sizeof(capability_buf));
