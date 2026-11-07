@@ -17815,7 +17815,6 @@ retry_wps_enr:
 					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_WIREGUARD);
 					wgc_set_exclusive_dns(i);
 				}
-re-apply VPN Director rules after add_multi_routes() in LB mode)
 #endif
 				for (i = OVPN_CLIENT_MAX; i > 0; i--) {
 					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_OPENVPN);
