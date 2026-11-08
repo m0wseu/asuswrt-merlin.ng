@@ -29,6 +29,13 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <sys/resource.h>
+void __attribute__((weak)) init_asus_pp_eula(void)
+{
+	if (!nvram_get("ASUS_PP_EULA"))
+	    nvram_set("ASUS_PP_EULA", "0");
+	if (!nvram_get("ASUS_PP_EULA_TIME"))
+	    nvram_set("ASUS_PP_EULA_TIME", "");
+}
 #ifdef LINUX26
 #if defined(RTCONFIG_HND_ROUTER_AX_6756)
 #include <sys/sysmacros.h>
