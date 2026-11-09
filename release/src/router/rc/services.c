@@ -23767,10 +23767,10 @@ int realip_main(int argc, char *argv[])
 		mtwan_get_route_table_id(wan_unit, table_str, sizeof(table_str));
 	}
 #endif
-#ifdef RTCONFIG_DUALWAN
-	if (load_balance && wan_unit < WAN_UNIT_MAX)
-		snprintf(table_str, sizeof(table_str), "%d", IP_ROUTE_TABLE_ID_DUALWAN_BASE + wan_unit * 100);
-#endif
+//#ifdef RTCONFIG_DUALWAN
+//	if (load_balance && wan_unit < WAN_UNIT_MAX)
+//		snprintf(table_str, sizeof(table_str), "%d", IP_ROUTE_TABLE_ID_DUALWAN_BASE + wan_unit * 100);
+//#endif
 	if (nvram_pf_get_int(wan_prefix, "state_t") != WAN_STATE_CONNECTED) {
 		printf("WAN(%d) is not connected\n", wan_unit);
 		return -1;
