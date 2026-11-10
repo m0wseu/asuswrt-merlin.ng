@@ -1854,6 +1854,7 @@ static int start_bandwidth_limiter(void)
 			fprintf(f, "\t$TFAU parent 2: prio %d protocol ip u32 match mark %d 0x%x flowid 2:%d\n", class, class, QOS_MASK, class);
 		}
 	}
+	free(buf);
 
 	// init guest 3: ~ 14: (12 guestnetwork), start number = 3
 	guest = 3;

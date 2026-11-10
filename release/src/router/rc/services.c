@@ -923,6 +923,7 @@ void create_passwd(void)
 					break;
 			}
 		}
+		free(nv);
 	}
 #endif
 
@@ -4346,8 +4347,10 @@ void write_static_leases(FILE *fp)
 	strlcpy(lan_if, nvram_get("lan_ifname")? : nvram_default_get("lan_ifname"), sizeof(lan_if));
 	ip1 = inet_network(nvram_safe_get("lan_ipaddr"));
 	lan_mask = inet_network(nvram_safe_get("lan_netmask"));
-	if (ip1 == -1 || lan_mask == -1)
+	if (ip1 == -1 || lan_mask == -1) {
+		free(nv);
 		return;
+	}
 	lan_net = ip1 & lan_mask;
 
 #if defined(RTCONFIG_PORT_BASED_VLAN) || defined(RTCONFIG_TAGGED_BASED_VLAN)
@@ -23586,7 +23589,7 @@ static void server_handler(int sock)
 	ret = select(sock+1, &rmask, NULL, NULL, &select_timeout);
 	if (ret > 0) {
 		FILE *fp;
-		char *buf;
+		char *buf = NULL;
 		int read_len = 0, tmp_len, buf_len;
 		len = read(sock, cmd, sizeof(cmd)-1);
 		if (len > 0) {
@@ -23598,11 +23601,14 @@ static void server_handler(int sock)
 				read_len = buf_len = 0;
 				while (1) {
 					buf_len += STEP_BUF_SIZE;
-					buf = (char *)realloc(buf, buf_len);
-					if (!buf) {
+					char *new_buf = (char *)realloc(buf, buf_len);
+					if (!new_buf) {
+						free(buf);
+						buf = NULL;
 						read_len=0;
 						break;
 					}
+					buf = new_buf;
 					tmp_len = fread(buf+read_len, 1, STEP_BUF_SIZE, fp);
 					read_len += tmp_len;
 					if (tmp_len < STEP_BUF_SIZE)
@@ -23622,6 +23628,7 @@ static void server_handler(int sock)
 				cmd[0]='\0';
 				write(sock, cmd, 1);
 			}
+			free(buf);
 		}
 	}
 	close(sock);
