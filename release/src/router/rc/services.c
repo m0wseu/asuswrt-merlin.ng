@@ -4732,7 +4732,8 @@ start_ddns(char *caller, int isAidisk)
 #endif
 		&& f_exists(cache_path) /* Not forced to restart DDNS */
 	) {
-		logmessage(log_title, "IP address, server and hostname have not changed since the last update.");
+		if (nvram_get_int("ddns_debug"))
+			logmessage(log_title, "IP address, server and hostname have not changed since the last update.");
 		if (!isAidisk) {
 			nvram_set("ddns_updated", "1");
 			/* for UI display */
@@ -4995,7 +4996,7 @@ start_ddns(char *caller, int isAidisk)
 				fprintf(fp, "custom namecheap {\n");
 				fprintf(fp, "ddns-server = dynamicdns.park-your-domain.com\n");
 				// We store the domain.tld in the username nvram
-				fprintf(fp, "ddns-path = \"/update?domain=%%u&password=%%p&host=%%h\"\n");
+				fprintf(fp, "ddns-path = \"/update?domain=%%u&password=%%p&host=%%h&ip=%%i\"\n");
 			} else {
 				fprintf(fp, "provider %s {\n", service);
 			}
