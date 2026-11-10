@@ -257,7 +257,6 @@ int rtkswitch_port_speed(int port)
 		memset(&pS, 0, sizeof(pS));
 		if (ioctl(fd, 0, &pS) < 0) {
 			perror("rtkswitch ioctl");
-			close(fd);
 		}
 
 		close(fd);
@@ -298,7 +297,6 @@ int rtkswitch_port_duplex(int port)
 		memset(&pS, 0, sizeof(pS));
 		if (ioctl(fd, 0, &pS) < 0) {
 			perror("rtkswitch ioctl");
-			close(fd);
 		}
 
 		close(fd);
@@ -468,7 +466,6 @@ int rtkswitch_port_stat(int port)
 #endif
 		if (ioctl(fd, 1, &Port_cntrs) < 0) {
 			perror("rtkswitch ioctl");
-			close(fd);
 		} else
 			show_port_stat(&Port_cntrs);
 
@@ -510,7 +507,6 @@ int rtkswitch_port_mactable(int port)
 #endif
 		if (ioctl(fd, 7, &Port_mactable) < 0) {
 			perror("rtkswitch ioctl");
-			close(fd);
 		} else
 			show_port_mactable(&Port_mactable);
 
