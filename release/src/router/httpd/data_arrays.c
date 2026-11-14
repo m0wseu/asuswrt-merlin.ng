@@ -117,6 +117,14 @@ ej_get_leases_array(int eid, webs_t wp, int argc, char_t **argv)
 }
 
 
+/* Lease files hold text from LAN clients, and the pages write it into a script block. */
+static void strip_upnp_chars(char *str, const char *chars)
+{
+	for (; *str; str++)
+		if (strchr(chars, *str))
+			*str = '_';
+}
+
 #ifdef RTCONFIG_IPV6
 #ifdef RTCONFIG_IGD2
 int
@@ -148,6 +156,9 @@ ej_ipv6_pinhole_array(int eid, webs_t wp, int argc, char_t **argv)
 	while (fgets(line, sizeof(line), fp) != NULL)
 	{
 // TCP;2600:1000:100:200:300:1234:5678:9abc;40003;::;0;1;1710906282;IGD2 pinhole
+
+		/* miniupnpd stores RemoteHost as sent when it can't resolve it */
+		strip_upnp_chars(line, "<>&\"'\\\r");
 
 		line_dup = strdup(line);
 			if (line_dup == NULL) {
@@ -251,14 +262,15 @@ ej_get_upnp_array(int eid, webs_t wp, int argc, char_t **argv)
 		desc[0] = '\0';
 
 		if (sscanf(line,
-			"%3[^:]:"
-			"%5[^:]:"
-			"%15[^:]:"
-			"%5[^:]:"
-			"%14[^:]:"
+			"%3[A-Z]:"
+			"%5[0-9]:"
+			"%15[0-9.]:"
+			"%5[0-9]:"
+			"%14[0-9]:"
 			"%199[^\n]",
 			proto, eport, iaddr, iport, timestamp, desc) < 5) continue;
 
+		strip_upnp_chars(desc, "<>&");
 		if (str_escape_quotes(desc2, desc, sizeof(desc2)) == 0)
 			strlcpy(desc2, desc, sizeof(desc2));
 
@@ -621,8 +633,8 @@ ej_lan_ipv6_network_array(int eid, webs_t wp, int argc, char_t **argv)
 	ret += websWrite(wp, "[\"WAN IPv6 Gateway\",\"%s\"],",
 			 ipv6_gateway_address() ? : "");
 
-	ret += websWrite(wp, "[\"LAN IPv6 Address\",\"%s/%d\"],",
-			 nvram_safe_get("ipv6_rtr_addr"), nvram_get_int("ipv6_prefix_length"));
+	ret += websWrite(wp, "[\"LAN IPv6 Address\",\"%s\"],",
+			 getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_PREFIXLEN) ? : "");
 
 	ret += websWrite(wp, "[\"LAN IPv6 Link-Local Address\",\"%s\"],",
 			 getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_LINKLOCAL | GIF_PREFIXLEN) ? : "");
@@ -1290,7 +1302,7 @@ int ej_connlist_array(int eid, webs_t wp, int argc, char **argv) {
 		if (strchr(line, '[')) {
 			parsed = sscanf(line,
 			         "%3s "
-                     "[%47[^]]]:%d "
+			         "[%47[^]]]:%d "
 			         "[%47[^]]]:%d"
 			         "%14s%*[ \t]",
 			         proto, address, &port1, dest, &port2, state);

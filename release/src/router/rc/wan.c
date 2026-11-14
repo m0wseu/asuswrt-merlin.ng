@@ -3956,6 +3956,10 @@ NOIP:
 		char *getip[] = {"getrealip.sh", NULL};
 		pid_t pid;
 
+		killall_tk("getrealip.sh");
+		nvram_set(strcat_r(prefix, "realip_state", tmp), "0");
+		nvram_set(strcat_r(prefix, "realip_ip", tmp), "");
+
 		//_eval(getip, ">>/tmp/log.txt", 0, &pid);
 		_eval(getip, ">>/dev/null", 0, &pid);
 #endif

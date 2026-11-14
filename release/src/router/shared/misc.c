@@ -778,8 +778,10 @@ struct vlan_rules_s *get_vlan_rules(void)
 		return NULL;
 
 	vlan_rules = malloc(sizeof(struct vlan_rules_s));
-	if (!vlan_rules)
+	if (!vlan_rules) {
+		free(nv);
 		return NULL;
+	}
 
 	r = &vlan_rules->rules[0];
 	memset(vlan_rules, 0, sizeof(struct vlan_rules_s));
@@ -1877,6 +1879,9 @@ int get_wan_proto(char *prefix)
 	int i;
 
 	strlcpy(proto, nvram_safe_get(strlcat_r(prefix, "proto", tmp, sizeof(tmp))), sizeof(proto));
+	if (*proto == '\0') {
+		strlcpy(proto, nvram_safe_get("wan_proto"), sizeof(proto));
+	}
 	for (i = 0; services[i].name; i++) {
 		if (strcmp(proto, services[i].name) == 0)
 			return services[i].service;
@@ -3928,34 +3933,44 @@ int set_crt_parsed(const char *name, char *file_path)
 #else
 	FILE *fp=fopen(file_path, "r");
 	char buffer[8000] = {0};
-	char buffer2[256] = {0};
+	char line[256] = {0};
 	char *p = buffer;
+	int used = 0, len;
 
-	if(fp) {
-		while(fgets(buffer, sizeof(buffer), fp)) {
-			if(!strncmp(buffer, "-----BEGIN", 10))
-				break;
-		}
-		if(feof(fp)) {
-			fclose(fp);
-			return -EINVAL;
-		}
-		p += strlen(buffer);
-		//if( *(p-1) == '\n' )
-			//*(p-1) = '>';
-		while(fgets(buffer2, sizeof(buffer2), fp)) {
-			strncpy(p, buffer2, strlen(buffer2));
-			p += strlen(buffer2);
-			//if( *(p-1) == '\n' )
-				//*(p-1) = '>';
-		}
-		*p = '\0';
-		nvram_set(name, buffer);
-		fclose(fp);
-		return 0;
-	}
-	else
+	if (!fp)
 		return -ENOENT;
+
+	while(fgets(line, sizeof(line), fp)) {
+		if(!strncmp(line, "-----BEGIN", 10))
+			break;
+	}
+	if(feof(fp)) {
+		fclose(fp);
+		return -EINVAL;
+	}
+
+	len = strlen(line);
+	memcpy(p, line, len);
+	p += len;
+	used += len;
+
+	while(fgets(line, sizeof(line), fp)) {
+		len = strlen(line);
+		if (used + len + 1 > sizeof(buffer)) {
+			fclose(fp);
+			return -E2BIG;
+		}
+		memcpy(p, line, len);
+		used += len;
+		p += len;
+	}
+	*p = '\0';
+	nvram_set(name, buffer);
+
+	fclose(fp);
+	return 0;
+}
+
 #endif
 }
 #endif
@@ -6652,6 +6667,25 @@ char *get_ddns_hostname(void)
 {
 	char *host = nvram_safe_get("ddns_hostname_x");
 	char *server = nvram_safe_get("ddns_server_x");
+	static char namecheap_host[256];
+
+	/* Namecheap stores the subdomain in hostname and the domain in username. */
+	if (strcmp(server, "WWW.NAMECHEAP.COM") == 0) {
+		char *domain = nvram_safe_get("ddns_username_x");
+		int len;
+
+		if (*host == '\0' || *domain == '\0')
+			return "";
+
+		if (strcmp(host, "@") == 0)
+			len = snprintf(namecheap_host, sizeof(namecheap_host), "%s", domain);
+		else
+			len = snprintf(namecheap_host, sizeof(namecheap_host), "%s.%s", host, domain);
+		if (len < 0 || (size_t)len >= sizeof(namecheap_host))
+			return "";
+
+		host = namecheap_host;
+	}
 
 	if ((strcmp(server, "WWW.DNSOMATIC.COM") == 0 && strcasecmp(host, "all.dnsomatic.com") == 0) ||
 	    (strcmp(server, "WWW.TUNNELBROKER.NET") == 0) ||

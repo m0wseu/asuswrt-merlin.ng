@@ -265,7 +265,7 @@ function display_clients(clientsarray, obj, unit) {
 			}
 
 			if (hostname.length > 24) {		// Name
-				code +='<br><span style="margin-top:-15px; color: cyan;" title="' + hostname + '">'+ hostname.substring(0,20) +'...</span></td>';
+				code +=`<br><span style="${secondFieldStyle}" title="${htmlEnDeCode.htmlEncode(hostname)}">${htmlEnDeCode.htmlEncode(hostname.substring(0,20))}...</span></td>`;
 			} else {
 				code +='<br><span style="margin-top:-15px; color: cyan;">'+ htmlEnDeCode.htmlEncode(hostname) +'</span></td>';
 			}
@@ -283,9 +283,10 @@ function display_clients(clientsarray, obj, unit) {
 			} else
 				code += '<br></td>'; // IPv6
 
-			code += '<td style="text-align: right;">' + client[5] + ' / ' + client[6] +' Mbps';	// Rate
-			code += '<br><span style="margin-top:-15px; color: cyan;">' + client[4] + ' dBm</td>';	// RSSI
-			code += '<td style="text-align: right;vertical-align:top;">' + client[7] + '</td>';	// Time
+
+			code += `<td style="text-align: right;">${client[5]} / ${client[6]} Mbps`;	// Rate
+			code += `<br><span style="${secondFieldStyle}">${client[4]} dBm</span></td>`;	// RSSI
+			code += `<td style="text-align: right;vertical-align:top;">${client[7]}</td>`;	// Time
 
 			if (client[8] != "") {
 				code += '<td style="vertical-align:top;">' + client[8] + ' ('+ client[9] +')';	// NSS + PHY
@@ -295,7 +296,7 @@ function display_clients(clientsarray, obj, unit) {
 				code += '<td>';
 			}
 			if (client[10] != "") {
-				code += '<br><span style="margin-top:-15px; color: cyan;">' + client[10] + '</td>';  // BW
+				code += `<br><span style="${secondFieldStyle}">${client[10]}</span></td>`;  // BW
 			} else {
 				code += '</td>';
 			}
