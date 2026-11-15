@@ -218,6 +218,11 @@ int ec_key_simple_generate_key(EC_KEY *eckey)
     if (order == NULL)
         goto err;
 
+    if (BN_cmp(order, BN_value_one()) <= 0) {
+        ECerr(EC_F_EC_KEY_GENERATE_KEY, EC_R_INVALID_GROUP_ORDER);
+        goto err;
+    }
+
     do
         if (!BN_priv_rand_range(priv_key, order))
             goto err;
