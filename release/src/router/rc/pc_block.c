@@ -280,7 +280,7 @@ char *arp_mac(struct in_addr sin_addr){
 	strcpy(areq.arp_dev, "br0");
 
 	ret = ioctl(s_arp, SIOCGARP, (caddr_t)&areq);
-	fclose(s_arp);
+	close(s_arp);
 	if (ret < 0){
 		perror("SIOCGARP");
 		return NULL;
