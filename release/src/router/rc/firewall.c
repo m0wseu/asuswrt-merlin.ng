@@ -2103,14 +2103,15 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 
 #ifdef RTCONFIG_TOR
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 		fprintf(fp, "-I PREROUTING -i %s -p udp --dport 53 -j REDIRECT --to-ports %s\n", lan_if, nvram_safe_get("Tor_dnsport"));
 		fprintf(fp, "-I PREROUTING -i %s -p udp --dport 123 -j REDIRECT --to-ports 123\n", lan_if); // requires an NTP server
 		fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, nvram_safe_get("Tor_transport"));
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -2130,8 +2131,8 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 					fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -m iprange --src-range %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, addr_new, nvram_safe_get("Tor_transport"));
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 
@@ -2624,14 +2625,15 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 
 #ifdef RTCONFIG_TOR
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 			fprintf(fp, "-I PREROUTING -i %s -p udp --dport 53 -j REDIRECT --to-ports %s\n", lan_if, nvram_safe_get("Tor_dnsport"));
 			fprintf(fp, "-I PREROUTING -i %s -p udp --dport 123 -j REDIRECT --to-ports 123\n", lan_if); // requires an NTP server
 			fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, nvram_safe_get("Tor_transport"));
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -2651,8 +2653,8 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 					fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -m iprange --src-range %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, addr_new, nvram_safe_get("Tor_transport"));
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 
@@ -3138,9 +3140,10 @@ void set_cap_apmode_filter(void)
 	char lan_class[32];
 	int evalRet;
 
-	if((fp = fopen(cap_rules, "w")) == NULL)
-		return;
 	if (sw_mode() == SW_MODE_REPEATER)
+		return;
+
+	if((fp = fopen(cap_rules, "w")) == NULL)
 		return;
 
 	ip2class(nvram_safe_get("lan_ipaddr"), nvram_safe_get("lan_netmask"), lan_class);
@@ -4936,8 +4939,9 @@ TRACE_PT("write wl filter\n");
 	 // for TOR users, block anything that cannot be routed through the TOR network (i.e. UDP and ICMP ping)
 	 // otherwise, it's a leak that could reveal your router's IP address
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 		fprintf(fp, "-I FORWARD -i %s -j DROP\n", lan_if);
 #ifdef RTCONFIG_IPV6
 		if (fp_ipv6)
@@ -4945,7 +4949,7 @@ TRACE_PT("write wl filter\n");
 #endif
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -4964,8 +4968,8 @@ TRACE_PT("write wl filter\n");
 					fprintf(fp, "-I FORWARD -i %s -m iprange --src-range %s -j DROP\n", lan_if, addr_new);
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 
