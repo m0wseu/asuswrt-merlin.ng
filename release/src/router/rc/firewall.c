@@ -1801,6 +1801,7 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 						*ptr = ':';
 					fprintf(fp, "-A MAPE -p %s --dport %s -j RETURN\n", proto, item);
 				}
+				free(nv);
 				fprintf(fp, "-A MAPE -p %s -j DNAT --to-destination %s\n", proto, "169.254.7.7");
 			}
 			fprintf(fp, "-A MAPE -p icmp -j DNAT --to-destination %s\n", "169.254.7.7");
