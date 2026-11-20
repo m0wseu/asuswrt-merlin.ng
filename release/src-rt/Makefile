@@ -2708,8 +2708,35 @@ define RouterOptions
 		echo "RTCONFIG_TUF_UI=y" >>$(1); \
 		sed -i "/RTCONFIG_OPEN_NAT/d" $(1); \
 		echo "RTCONFIG_OPEN_NAT=y" >>$(1); \
-	else \
-		echo "# RTCONFIG_TUF_UI is not set" >>$(1); \
+		sed -i "/RTCONFIG_NETOOL/d" $(1); \
+		echo "RTCONFIG_NETOOL=y" >>$(1); \
+		sed -i "/RTCONFIG_GAME_MODE/d" $(1); \
+		echo "RTCONFIG_GAME_MODE=y" >>$(1); \
+		if [ "$(MTLANCFG)" = "y" ] && [ "$(WIFI7)" = "y" ]; then \
+			sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+			echo "RTCONFIG_SDN_PRIORITY=y" >>$(1); \
+		else \
+			sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+			echo "# RTCONFIG_SDN_PRIORITY is not set" >> $(1); \
+		fi; \
+	fi;
+	if [ "$(SDN_PRIORITY)" = "y" ]; then \
+		sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+		echo "RTCONFIG_SDN_PRIORITY=y" >>$(1); \
+	fi;
+	if [ "$(TUF_UI)" = "y" ]; then \
+		sed -i "/RTCONFIG_TUF_UI/d" $(1); \
+		echo "RTCONFIG_TUF_UI=y" >>$(1); \
+		sed -i "/RTCONFIG_NETOOL/d" $(1); \
+		echo "RTCONFIG_NETOOL=y" >>$(1); \
+	fi;
+	if [ "$(PROART_UI)" = "y" ]; then \
+		sed -i "/RTCONFIG_PROART_UI/d" $(1); \
+		echo "RTCONFIG_PROART_UI=y" >>$(1); \
+	fi;
+	if [ "$(DASHBOARD)" = "y" ]; then \
+		sed -i "/RTCONFIG_DASHBOARD/d" $(1); \
+		echo "RTCONFIG_DASHBOARD=y" >>$(1); \
 	fi;
 	if [ "$(GEOIP)" = "y" ]; then \
 		sed -i "/RTCONFIG_GEOIP/d" $(1); \
