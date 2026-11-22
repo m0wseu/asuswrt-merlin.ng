@@ -1530,7 +1530,12 @@ define RouterOptions
 		sed -i "/RTCONFIG_INTERNETCTRL/d" $(1); \
 		echo "RTCONFIG_INTERNETCTRL=y" >>$(1); \
 	fi;
-	if [ "$(OPENSSL)" = "11" -o "$(OPENSSL11)" = "y" ]; then \
+	if [ "$(OPENSSL)" = "35" -o "$(OPENSSL35)" = "y" ]; then \
+		sed -i "/RTCONFIG_OPENSSL/d" $(1); \
+		echo "# RTCONFIG_OPENSSL10 is not set" >>$(1); \
+		echo "# RTCONFIG_OPENSSL11 is not set" >>$(1); \
+		echo "RTCONFIG_OPENSSL35=y" >>$(1); \
+	elif [ "$(OPENSSL)" = "11" -o "$(OPENSSL11)" = "y" ]; then \
 		sed -i "/RTCONFIG_OPENSSL/d" $(1); \
 		echo "# RTCONFIG_OPENSSL10 is not set" >>$(1); \
 		echo "RTCONFIG_OPENSSL11=y" >>$(1); \
@@ -4331,6 +4336,10 @@ define RouterOptions
 		sed -i "/RTCONFIG_SECURE_BY_DEFAULT\>/d" $(1); \
 		echo "RTCONFIG_SECURE_BY_DEFAULT=y" >>$(1); \
 	fi;
+	if [ "$(ZASSOC_B4ACS)" = "y" ]; then \
+		sed -i "/RTCONFIG_ZASSOC_B4ACS/d" $(1); \
+		echo "RTCONFIG_ZASSOC_B4ACS=y" >>$(1); \
+	fi;
 	$(call platformRouterOptions, $(1))
 endef
 
@@ -6002,6 +6011,12 @@ fi;
 		sed -i "/CONFIG_BCM_EXT_SWITCH_TYPE/d" $(1); \
 		echo "CONFIG_BCM_EXT_SWITCH_TYPE=53134" >>$(1); \
 	fi;
+	if [ "$(BUILD_NAME)" = "RT-AX58U_V2" ] || [ "$(BUILD_NAME)" = "TUF-AX3000_V2" ] || [ "$(BUILD_NAME)" = "RT-AXE7800" ] || [ "$(BUILD_NAME)" = "BR63" ]; then \
+		sed -i "/CONFIG_BCM_BPM_DYNAMIC_PRCNT_MAX_BUF/d" $(1); \
+		echo "CONFIG_BCM_BPM_DYNAMIC_PRCNT_MAX_BUF=25" >>$(1); \
+		sed -i "/CONFIG_BCM_BPM_DYNAMIC_PRCNT_INIT_BUF/d" $(1); \
+		echo "CONFIG_BCM_BPM_DYNAMIC_PRCNT_INIT_BUF=5" >>$(1); \
+	fi;
 	if [ "$(WIREGUARD)" = "y" ]; then \
 		sed -i "/CONFIG_WIREGUARD/d" $(1); \
 		echo "CONFIG_WIREGUARD=m" >>$(1); \
@@ -6529,4 +6544,3 @@ get_extendno:
 .PHONY: dummy
 .PHONY: pre_tools
 .PHONY: get_extendno
-

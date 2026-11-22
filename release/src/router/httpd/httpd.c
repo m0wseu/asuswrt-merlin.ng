@@ -113,6 +113,7 @@ typedef struct conn_item {
 	int fd;
 	usockaddr usa;
 	time_t deadline;
+	FILE *fp;	/* TLS session awaiting its first request */
 } conn_item_t;
 
 typedef struct conn_list {
@@ -370,6 +371,72 @@ void Debug2File(const char *path, const char *fmt, ...)
 		fclose(fp);
 	} else
 		fprintf(stderr, "Open %s Error!\n", path);
+}
+#else
+void Debug2String(int level, char *path, int conlog, int showtime, unsigned filesize, char *function_name, int function_line, const char *fmt, ...)
+{
+	int max_log = 5;
+	int len = 0, str_end = 0;
+	char *p_message = NULL, *log_message = NULL;
+	char message[2048] = {0}, tmp1[768] = {0}, tmp2[1024] = {0};
+	va_list args;
+
+	va_start(args, fmt);
+	len = vsnprintf(message, sizeof(message), fmt, args);
+	va_end(args);
+
+	p_message = message;
+
+	while(len > 0 && max_log > 0){
+
+		strlcpy(tmp1, p_message, sizeof(tmp1));
+		log_message = tmp1;
+		str_end	 = strlen(tmp1);
+
+		if(tmp1[str_end-1] != '\n'){
+			snprintf(tmp2, sizeof(tmp2), "%s\n", tmp1);
+			log_message = tmp2;
+		}
+
+		asusdebuglog(level, path, conlog, showtime, filesize, "[%s(%d)]:%s", function_name, function_line, log_message);
+
+		len = len - str_end;
+		max_log--;
+		p_message += str_end;
+	}
+}
+
+void security2log(int level, char *path, int conlog, int showtime, unsigned filesize, const char *fmt, ...)
+{
+	int max_log = 5;
+	int len = 0, str_end = 0;
+	char *p_message = NULL, *log_message = NULL;
+	char message[2048] = {0}, tmp1[768] = {0}, tmp2[1024] = {0};
+	va_list args;
+
+	va_start(args, fmt);
+	len = vsnprintf(message, sizeof(message), fmt, args);
+	va_end(args);
+
+	p_message = message;
+
+	while(len > 0 && max_log > 0){
+
+		strlcpy(tmp1, p_message, sizeof(tmp1));
+		log_message = tmp1;
+		str_end	 = strlen(tmp1);
+
+		if(tmp1[str_end-1] != '\n'){
+			snprintf(tmp2, sizeof(tmp2), "%s\n", tmp1);
+			log_message = tmp2;
+		}
+
+		asusdebuglog(level, path, conlog, showtime, filesize, "%s", log_message);
+
+		len = len - str_end;
+		max_log--;
+		p_message += str_end;
+	}
 }
 #endif
 
@@ -2626,6 +2693,7 @@ reload_cert:
 			/* Set the KEEPALIVE option to cull dead connections */
 			setsockopt(item->fd, SOL_SOCKET, SO_KEEPALIVE, &int_1, sizeof(int_1));
 			item->deadline = tv.tv_sec + MAX_CONN_TIMEOUT;
+			item->fp = NULL;
 
 			/* Add to active connections */
 			FD_SET(item->fd, &active_rfds);
@@ -2649,13 +2717,28 @@ reload_cert:
 			/* Process request if any */
 			if (FD_ISSET(item->fd, &rfds)) {
 #ifdef RTCONFIG_HTTPS
-				if (do_ssl) {
-					ssl_stream_fd = item->fd;
-					if (!(conn_fp = ssl_server_fopen(item->fd))) {
+				if (do_ssl && !item->fp) {
+					/* Only do the TLS handshake for now, then wait for the
+					 * request through select() like plain HTTP does, so idle
+					 * (e.g. preconnected) sessions don't stall other clients */
+					if (!(item->fp = ssl_server_fopen(item->fd))) {
 						HTTPD_DBG("fdopen(ssl): skip\n");
 						perror("fdopen(ssl)");
 						goto reset;
 					}
+					item->deadline = uptime() + MAX_CONN_TIMEOUT;
+
+					/* Back to active connections, skipping it for this pass */
+					FD_CLR(item->fd, &rfds);
+					FD_SET(item->fd, &active_rfds);
+					TAILQ_INSERT_TAIL(&pool.head, item, entry);
+					pool.count++;
+					continue;
+				}
+				if (do_ssl) {
+					ssl_stream_fd = item->fd;
+					conn_fp = item->fp;
+					item->fp = NULL;
 				} else
 #endif
 				if (!(conn_fp = fdopen(item->fd, "r+"))) {
@@ -2688,6 +2771,12 @@ reload_cert:
 			/* Close timed out and/or still alive */
 			if (item->fd >= 0) {
 				shutdown(item->fd, SHUT_RDWR);
+#ifdef RTCONFIG_HTTPS
+				/* Idle TLS session: shut down first so no close_notify
+				 * gets sent, letting the client see it as closed */
+				if (item->fp)
+					fclose(item->fp);
+#endif
 				close(item->fd);
 			}
 

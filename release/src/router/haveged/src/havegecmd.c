@@ -39,6 +39,7 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <semaphore.h>
 
 #ifndef HAVE_STRUCT_UCRED
 struct ucred
@@ -52,8 +53,9 @@ struct ucred
 #include "havegecmd.h"
 
 int first_byte;
-int socket_fd;
+int socket_fd = -1;
 static char errmsg[1024];
+extern  sem_t *sem;
 
 static int new_root(               /* RETURN: status                        */
    const char *root,               /* IN: path of the new root file system  */
@@ -95,6 +97,9 @@ static int new_root(               /* RETURN: status                        */
                strerror(errno));
       goto err;
       }
+   if (sem) {
+       sem_close(sem);
+       }
    ret = execv((const char *)path, argv);
    if (ret < 0) {
       snprintf(&errmsg[0], sizeof(errmsg)-1,
@@ -246,7 +251,7 @@ int socket_handler(                /* RETURN: closed file descriptor        */
    struct pparams *params)         /* IN: input params                      */
 {
    struct ucred cred = {0};
-   unsigned char magic[2], *ptr;
+   unsigned char magic[2] = {0}, *ptr;
    char *enqry;
    char *optarg = NULL;
    socklen_t clen;
@@ -254,37 +259,6 @@ int socket_handler(                /* RETURN: closed file descriptor        */
 
    if (fd < 0) {
       print_msg("%s: no connection jet\n", params->daemon);
-      }
-
-   ptr = &magic[0];
-   len = sizeof(magic);
-   ret = safein(fd, ptr, len);
-   if (ret < 0) {
-      print_msg("%s: can not read from UNIX socket\n", params->daemon);
-      goto out;
-      }
-
-   if (magic[1] == '\002') {       /* ASCII start of text: read argument provided */
-      uint32_t alen;
-
-      ret = receive_uinteger(fd, &alen);
-      if (ret < 0) {
-         print_msg("%s: can not read from UNIX socket\n", params->daemon);
-         goto out;
-         }
-
-      optarg = calloc(alen, sizeof(char));
-      if (!optarg) {
-          print_msg("can not allocate memory for message from UNIX socket");
-          goto out;
-          }
-      ptr = (unsigned char*)optarg;
-
-      ret = safein(fd, ptr, alen);
-      if (ret < 0) {
-         print_msg("%s: can not read from UNIX socket\n", params->daemon);
-         goto out;
-         }
       }
 
    clen = sizeof(struct ucred);
@@ -303,6 +277,73 @@ int socket_handler(                /* RETURN: closed file descriptor        */
       ptr = (unsigned char *)enqry;
       len = (int)strlen(enqry)+1;
       safeout(fd, ptr, len);
+      goto out;
+      }
+
+   /* Reject peers from a different user namespace — uid 0 inside a
+      user namespace maps to an unprivileged host user but passes the
+      SO_PEERCRED check above. */
+   {
+      struct stat self_ns, peer_ns;
+      char ns_path[64];
+      snprintf(ns_path, sizeof(ns_path), "/proc/%d/ns/user", (int)cred.pid);
+      if (stat("/proc/self/ns/user", &self_ns) == 0) {
+         if (stat(ns_path, &peer_ns) != 0 ||
+             self_ns.st_ino != peer_ns.st_ino ||
+             self_ns.st_dev != peer_ns.st_dev) {
+            enqry = ASCII_NAK;
+            ptr = (unsigned char *)enqry;
+            len = (int)strlen(enqry)+1;
+            safeout(fd, ptr, len);
+            goto out;
+         }
+      }
+   }
+
+   ptr = &magic[0];
+   len = sizeof(magic);
+   ret = safein(fd, ptr, len);
+   if (ret < 0) {
+      print_msg("%s: can not read from UNIX socket\n", params->daemon);
+      goto out;
+      }
+
+   if (magic[1] == '\002') {       /* ASCII start of text: read argument provided */
+      uint32_t alen = 0;
+
+      /*
+       * wait for the haveged -c instance to finish writting
+       * before continuing to read from the socket
+       */
+      if (sem != NULL) {
+         sem_wait(sem);
+         sem_post(sem);
+         }
+      ret = receive_uinteger(fd, &alen);
+      if (ret < 0) {
+         print_msg("%s: can not read from UNIX socket\n", params->daemon);
+         goto out;
+         }
+
+      optarg = calloc(alen, sizeof(char));
+      if (!optarg) {
+          print_msg("can not allocate memory for message from UNIX socket");
+          goto out;
+          }
+      ptr = (unsigned char*)optarg;
+
+      ret = safein(fd, ptr, alen);
+      if (ret < 0) {
+         print_msg("%s: can not read from UNIX socket\n", params->daemon);
+         goto out;
+         }
+      /*
+       * We no more need the semaphore unlink it
+       * Not sure if it is the best place to unlink here
+       */
+      if (sem != NULL) {
+         sem_unlink(SEM_NAME);
+         }
       }
 
    switch (magic[0]) {
@@ -383,7 +424,11 @@ ssize_t safein(                    /* RETURN: read bytes                    */
          if (errno == EAGAIN || errno == EWOULDBLOCK)
             break;
          print_msg("Unable to read from socket %d: %s", socket_fd, strerror(errno));
+         ret = -1;
+         break;
          }
+      if (p == 0)
+         break;
       ptr = (char *) ptr + p;
       ret += p;
       len -= p;
@@ -411,7 +456,10 @@ void safeout(                      /* RETURN: nothing                       */
          if (errno == EPIPE || errno == EAGAIN || errno == EWOULDBLOCK)
                      break;
          print_msg("Unable to write to socket %d: %s", fd, strerror(errno));
+         break;
          }
+       if (p == 0)
+          break;
        ptr = (char *) ptr + p;
        len -= p;
        }
@@ -444,7 +492,7 @@ int receive_uinteger(              /* RETURN: status                        */
    int fd,                         /* IN: file descriptor                   */
    uint32_t *value)                /* OUT: 32 bit unsigned integer          */
 {
-   uint8_t buffer[4];
+   uint8_t buffer[4] = {0};
 
    if (safein(fd, buffer, 4 * sizeof(uint8_t)) < 0)
       return -1;
