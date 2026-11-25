@@ -917,4 +917,3 @@ int get_app_mnt(struct json_object *app_mnt_obj)
 		json_object_object_add(app_mnt_obj, "app_mnt_ts", json_object_new_string(nvram_safe_get("app_mnt_ts")));
 	}
 }
-
