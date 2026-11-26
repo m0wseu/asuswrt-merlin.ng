@@ -2265,7 +2265,7 @@ int dnsmasq_script_main(int argc, char **argv)
 void start_stubby(void)
 {
 	const static char *stubby_config = "/etc/stubby/stubby.yml";
-	const static char *stubby_log = NULL;
+	const char *stubby_log = NULL;
 	char *stubby_argv[] = { "/usr/sbin/stubby",
 		"-g",
 		"-C", (char *)stubby_config,
