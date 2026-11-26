@@ -19,13 +19,28 @@
 <script language="JavaScript" type="text/javascript" src="/help.js"></script>
 <script>
 
+var ipv6_debug_orig = "<% nvram_get("ipv6_debug"); %>";
+var stubby_debug_orig = "<% nvram_get("stubby_debug"); %>";
+
 function initial() {
 	show_menu();
 	initConntrackValues()
+
+	if (Bcmwifi_support) {
+		var acsd_syslog_state = (parseInt(document.form.acsd_debug_level.value) & 0x80) ? "1" : "0";
+		setRadioValue(document.form.acsd_syslog, acsd_syslog_state);
+	} else {
+		document.getElementById("acsd_syslog_tr").style.display = "none";
+		document.form.acsd_debug_level.disabled = true;
+	}
+
+	if (!IPv6_support)
+		document.getElementById("ipv6_debug_tr").style.display = "none";
+	if (!dnspriv_support)
+		document.getElementById("stubby_debug_tr").style.display = "none";
 }
 
 function initConntrackValues(){
-
 	tcp_array = document.form.ct_tcp_timeout.value.split(" ");
 
 	document.form.tcp_established.value = tcp_array[1];
@@ -41,7 +56,6 @@ function initConntrackValues(){
 
 	document.form.udp_unreplied.value = udp_array[0];
 	document.form.udp_assured.value = udp_array[1];
-
 }
 
 
@@ -73,8 +87,21 @@ function applyRule(){
 
 	document.form.ct_udp_timeout.value = document.form.udp_unreplied.value + " "+document.form.udp_assured.value;
 
-	if (getRadioValue(document.form.dns_local_cache) != "<% nvram_get("dns_local_cache"); %>")
-		document.form.action_script.value += ";restart_dnsmasq";
+	if (Bcmwifi_support) {
+		var acsd_level = parseInt(document.form.acsd_debug_level.value);
+		if (isNaN(acsd_level))
+			acsd_level = 1;
+		var new_level = (document.form.acsd_syslog[0].checked ? (acsd_level | 0x80) : (acsd_level & ~0x80));
+		if (new_level != acsd_level) {
+			document.form.acsd_debug_level.value = "0x" + new_level.toString(16);
+			document.form.action_script.value += ";restart_acsd";
+		}
+	}
+
+	if (IPv6_support && getRadioValue(document.form.ipv6_debug) != ipv6_debug_orig)
+		document.form.action_script.value += ";restart_dhcp6c";
+	if (dnspriv_support && getRadioValue(document.form.stubby_debug) != stubby_debug_orig)
+		document.form.action_script.value += ";restart_stubby";
 
 	document.form.submit();
 }
@@ -101,6 +128,7 @@ function applyRule(){
 <input type="hidden" name="firmver" value="<% nvram_get("firmver"); %>">
 <input type="hidden" name="ct_tcp_timeout" value="<% nvram_get("ct_tcp_timeout"); %>">
 <input type="hidden" name="ct_udp_timeout" value="<% nvram_get("ct_udp_timeout"); %>">
+<input type="hidden" name="acsd_debug_level" value="<% nvram_get("acsd_debug_level"); %>">
 <table class="content" align="center" cellpadding="0" cellspacing="0">
   <tr>
     <td width="17">&nbsp;</td>
@@ -216,7 +244,7 @@ function applyRule(){
 					</tr>
 				</table>
 				<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3"  class="FormTable" style="margin-top:8px;">
-                                        <thead>
+					<thead>
 						<tr>
 							<td colspan="2">Advanced Tweaks and Hacks</td>
 						</tr>
@@ -254,6 +282,41 @@ function applyRule(){
 						<td>
 							<input type="radio" name="dhcpd_send_wpad" class="input" value="1" <% nvram_match_x("", "dhcpd_send_wpad", "1", "checked"); %>><#checkbox_Yes#>
 							<input type="radio" name="dhcpd_send_wpad" class="input" value="0" <% nvram_match_x("", "dhcpd_send_wpad", "0", "checked"); %>><#checkbox_No#>
+						</td>
+					</tr>
+				</table>
+				<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3"  class="FormTable" style="margin-top:8px;">
+					<thead>
+						<tr>
+							<td colspan="2">Logging options</td>
+						</tr>
+					</thead>
+					<tr>
+						<th>DDNS: enable debug logging</th>
+						<td>
+							<input type="radio" name="ddns_debug" class="input" value="1" <% nvram_match_x("", "ddns_debug", "1", "checked"); %>><#checkbox_Yes#>
+							<input type="radio" name="ddns_debug" class="input" value="0" <% nvram_match_x("", "ddns_debug", "0", "checked"); %>><#checkbox_No#>
+						</td>
+					</tr>
+					<tr id="ipv6_debug_tr">
+						<th>IPv6: enable DHCPv6 client debug logging</th>
+						<td>
+							<input type="radio" name="ipv6_debug" class="input" value="1" <% nvram_match_x("", "ipv6_debug", "1", "checked"); %>><#checkbox_Yes#>
+							<input type="radio" name="ipv6_debug" class="input" value="0" <% nvram_match_x("", "ipv6_debug", "0", "checked"); %>><#checkbox_No#>
+						</td>
+					</tr>
+					<tr id="stubby_debug_tr">
+						<th>DNS Privacy: enable Stubby debug logging (to /tmp/stubby.log)</th>
+						<td>
+							<input type="radio" name="stubby_debug" class="input" value="1" <% nvram_match_x("", "stubby_debug", "1", "checked"); %>><#checkbox_Yes#>
+							<input type="radio" name="stubby_debug" class="input" value="0" <% nvram_match_x("", "stubby_debug", "0", "checked"); %>><#checkbox_No#>
+						</td>
+					</tr>
+					<tr id="acsd_syslog_tr">
+						<th>Wireless: log ACSD (auto channel selection) events to syslog</th>
+						<td>
+							<input type="radio" name="acsd_syslog" class="input" value="1"><#checkbox_Yes#>
+							<input type="radio" name="acsd_syslog" class="input" value="0"><#checkbox_No#>
 						</td>
 					</tr>
 				</table>
