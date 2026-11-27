@@ -557,6 +557,20 @@ static void _wg_server_nf_add(const char* prefix, const char* ifname)
 		fprintf(fp, "ip6tables -t mangle -I POSTROUTING -o %s -j MARK --or 0x1\n", ifname);
 #endif
 
+#ifdef RTCONFIG_DUALWAN
+		/* Load balancing only marks connections from the LAN bridge.
+		 * Unmarked client traffic follows the multipath default route,
+		 * which kernels before 4.4 pick per packet, so packets of one
+		 * NATed connection leave through both WANs. Keep each client
+		 * connection on the primary WAN. */
+		if (nvram_match("wans_mode", "lb"))
+		{
+			fprintf(fp, "iptables -t mangle -A PREROUTING -i %s -m state --state NEW -j CONNMARK --set-xmark 0x%08x/0xf0000000\n",
+				ifname, (0x8U + wan_primary_ifunit()) << 28);
+			fprintf(fp, "iptables -t mangle -A PREROUTING -i %s -m connmark --mark 0x80000000/0x80000000 -j CONNMARK --restore-mark --mask 0xf0000000\n", ifname);
+		}
+#endif
+
 		fclose(fp);
 		chmod(path, S_IRUSR|S_IWUSR|S_IXUSR);
 		eval(path);
