@@ -1530,7 +1530,12 @@ define RouterOptions
 		sed -i "/RTCONFIG_INTERNETCTRL/d" $(1); \
 		echo "RTCONFIG_INTERNETCTRL=y" >>$(1); \
 	fi;
-	if [ "$(OPENSSL)" = "11" -o "$(OPENSSL11)" = "y" ]; then \
+	if [ "$(OPENSSL)" = "35" -o "$(OPENSSL35)" = "y" ]; then \
+		sed -i "/RTCONFIG_OPENSSL/d" $(1); \
+		echo "# RTCONFIG_OPENSSL10 is not set" >>$(1); \
+		echo "# RTCONFIG_OPENSSL11 is not set" >>$(1); \
+		echo "RTCONFIG_OPENSSL35=y" >>$(1); \
+	elif [ "$(OPENSSL)" = "11" -o "$(OPENSSL11)" = "y" ]; then \
 		sed -i "/RTCONFIG_OPENSSL/d" $(1); \
 		echo "# RTCONFIG_OPENSSL10 is not set" >>$(1); \
 		echo "RTCONFIG_OPENSSL11=y" >>$(1); \
@@ -2703,8 +2708,35 @@ define RouterOptions
 		echo "RTCONFIG_TUF_UI=y" >>$(1); \
 		sed -i "/RTCONFIG_OPEN_NAT/d" $(1); \
 		echo "RTCONFIG_OPEN_NAT=y" >>$(1); \
-	else \
-		echo "# RTCONFIG_TUF_UI is not set" >>$(1); \
+		sed -i "/RTCONFIG_NETOOL/d" $(1); \
+		echo "RTCONFIG_NETOOL=y" >>$(1); \
+		sed -i "/RTCONFIG_GAME_MODE/d" $(1); \
+		echo "RTCONFIG_GAME_MODE=y" >>$(1); \
+		if [ "$(MTLANCFG)" = "y" ] && [ "$(WIFI7)" = "y" ]; then \
+			sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+			echo "RTCONFIG_SDN_PRIORITY=y" >>$(1); \
+		else \
+			sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+			echo "# RTCONFIG_SDN_PRIORITY is not set" >> $(1); \
+		fi; \
+	fi;
+	if [ "$(SDN_PRIORITY)" = "y" ]; then \
+		sed -i "/RTCONFIG_SDN_PRIORITY/d" $(1); \
+		echo "RTCONFIG_SDN_PRIORITY=y" >>$(1); \
+	fi;
+	if [ "$(TUF_UI)" = "y" ]; then \
+		sed -i "/RTCONFIG_TUF_UI/d" $(1); \
+		echo "RTCONFIG_TUF_UI=y" >>$(1); \
+		sed -i "/RTCONFIG_NETOOL/d" $(1); \
+		echo "RTCONFIG_NETOOL=y" >>$(1); \
+	fi;
+	if [ "$(PROART_UI)" = "y" ]; then \
+		sed -i "/RTCONFIG_PROART_UI/d" $(1); \
+		echo "RTCONFIG_PROART_UI=y" >>$(1); \
+	fi;
+	if [ "$(DASHBOARD)" = "y" ]; then \
+		sed -i "/RTCONFIG_DASHBOARD/d" $(1); \
+		echo "RTCONFIG_DASHBOARD=y" >>$(1); \
 	fi;
 	if [ "$(GEOIP)" = "y" ]; then \
 		sed -i "/RTCONFIG_GEOIP/d" $(1); \
@@ -4330,6 +4362,10 @@ define RouterOptions
 	if [ "$(SECURE_BY_DEFAULT)" = "y" ]; then \
 		sed -i "/RTCONFIG_SECURE_BY_DEFAULT\>/d" $(1); \
 		echo "RTCONFIG_SECURE_BY_DEFAULT=y" >>$(1); \
+	fi;
+	if [ "$(ZASSOC_B4ACS)" = "y" ]; then \
+		sed -i "/RTCONFIG_ZASSOC_B4ACS/d" $(1); \
+		echo "RTCONFIG_ZASSOC_B4ACS=y" >>$(1); \
 	fi;
 	$(call platformRouterOptions, $(1))
 endef
@@ -6002,6 +6038,12 @@ fi;
 		sed -i "/CONFIG_BCM_EXT_SWITCH_TYPE/d" $(1); \
 		echo "CONFIG_BCM_EXT_SWITCH_TYPE=53134" >>$(1); \
 	fi;
+	if [ "$(BUILD_NAME)" = "RT-AX58U_V2" ] || [ "$(BUILD_NAME)" = "TUF-AX3000_V2" ] || [ "$(BUILD_NAME)" = "RT-AXE7800" ] || [ "$(BUILD_NAME)" = "BR63" ]; then \
+		sed -i "/CONFIG_BCM_BPM_DYNAMIC_PRCNT_MAX_BUF/d" $(1); \
+		echo "CONFIG_BCM_BPM_DYNAMIC_PRCNT_MAX_BUF=25" >>$(1); \
+		sed -i "/CONFIG_BCM_BPM_DYNAMIC_PRCNT_INIT_BUF/d" $(1); \
+		echo "CONFIG_BCM_BPM_DYNAMIC_PRCNT_INIT_BUF=5" >>$(1); \
+	fi;
 	if [ "$(WIREGUARD)" = "y" ]; then \
 		sed -i "/CONFIG_WIREGUARD/d" $(1); \
 		echo "CONFIG_WIREGUARD=m" >>$(1); \
@@ -6529,4 +6571,3 @@ get_extendno:
 .PHONY: dummy
 .PHONY: pre_tools
 .PHONY: get_extendno
-

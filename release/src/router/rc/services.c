@@ -923,6 +923,7 @@ void create_passwd(void)
 					break;
 			}
 		}
+		free(nv);
 	}
 #endif
 
@@ -1425,7 +1426,7 @@ int write_etc_hosts()
 
 			if (ip && *ip != '\0' && hostname && *hostname != '\0' && is_valid_hostname(hostname))
 			{
-				fprintf(fp, "%s %s.%s\n", ip, hostname, lan_domain);
+				fprintf(fp, "%s %s.%s %s\n", ip, hostname, lan_domain, hostname);
 			}
 		}
 		free(nv);
@@ -2264,7 +2265,7 @@ int dnsmasq_script_main(int argc, char **argv)
 void start_stubby(void)
 {
 	const static char *stubby_config = "/etc/stubby/stubby.yml";
-	const static char *stubby_log = NULL;
+	const char *stubby_log = NULL;
 	char *stubby_argv[] = { "/usr/sbin/stubby",
 		"-g",
 		"-C", (char *)stubby_config,
@@ -2443,10 +2444,12 @@ void add_ip6_lanaddr(void)
 {
 	char ip[INET6_ADDRSTRLEN + 4];
 	const char *p;
+	int prefix_len;
 
 	p = ipv6_router_address(NULL);
 	if (*p) {
-		snprintf(ip, sizeof(ip), "%s/%d", p, nvram_get_int(ipv6_nvname("ipv6_prefix_length")) ? : 64);
+		prefix_len = nvram_get_int(ipv6_nvname("ipv6_prefix_length"));
+		snprintf(ip, sizeof(ip), "%s/%d", p, (prefix_len > 64 ? prefix_len : 64));
 		eval("ip", "-6", "addr", "add", ip, "dev", nvram_safe_get("lan_ifname"));
 		if (!nvram_match(ipv6_nvname("ipv6_rtr_addr"), (char*)p))
 			nvram_set(ipv6_nvname("ipv6_rtr_addr"), (char*)p);
@@ -4344,8 +4347,10 @@ void write_static_leases(FILE *fp)
 	strlcpy(lan_if, nvram_get("lan_ifname")? : nvram_default_get("lan_ifname"), sizeof(lan_if));
 	ip1 = inet_network(nvram_safe_get("lan_ipaddr"));
 	lan_mask = inet_network(nvram_safe_get("lan_netmask"));
-	if (ip1 == -1 || lan_mask == -1)
+	if (ip1 == -1 || lan_mask == -1) {
+		free(nv);
 		return;
+	}
 	lan_net = ip1 & lan_mask;
 
 #if defined(RTCONFIG_PORT_BASED_VLAN) || defined(RTCONFIG_TAGGED_BASED_VLAN)
@@ -4789,6 +4794,10 @@ start_ddns(char *caller, int isAidisk)
 		service = "default@freedns.afraid.org";
 	else if (strcmp(server, "FREEMYIP.COM") == 0)
 		service = "default@freemyip.com";
+	else if (strcmp(server, "PUBYUN.COM") == 0)
+		service = "dyndns@3322.org";
+	else if (strcmp(server, "DNSPOD.CN") == 0)
+		service = "dnspod.cn";
 	else if (strcmp(server, "WWW.TUNNELBROKER.NET") == 0) {
 		service = "default@tunnelbroker.net";
 		eval("iptables", "-t", "filter", "-D", "INPUT", "-p", "icmp", "-s", "66.220.2.74", "-j", "ACCEPT");
@@ -4833,6 +4842,8 @@ start_ddns(char *caller, int isAidisk)
 	}
 	else if (strcmp(server, "DOMAINS.GOOGLE.COM") == 0)
 		service = "default@domains.google.com";
+	else if (strcmp(server, "CLOUDFLARE.COM") == 0)
+		service = "cloudflare.com";
 #endif
 	else if (strcmp(server, "WWW.ORAY.COM") == 0) {
 		service = "peanuthull", asus_ddns = 2;
@@ -4984,7 +4995,7 @@ start_ddns(char *caller, int isAidisk)
 				fprintf(fp, "custom namecheap {\n");
 				fprintf(fp, "ddns-server = dynamicdns.park-your-domain.com\n");
 				// We store the domain.tld in the username nvram
-				fprintf(fp, "ddns-path = \"/update?domain=%%u&password=%%p&host=%%h\"\n");
+				fprintf(fp, "ddns-path = \"/update?domain=%%u&password=%%p&host=%%h&ip=%%i\"\n");
 			} else {
 				fprintf(fp, "provider %s {\n", service);
 			}
@@ -5366,16 +5377,6 @@ start_syslogd(void)
 			syslogd_argv[argc++] = "1024";
 		else
 #endif
-#ifdef RTCONFIG_HND_ROUTER
-#ifdef RTCONFIG_DBLOG
-		if(nvram_match("dblog_adj_syslog", "1"))
-		{
-			syslogd_argv[argc++] = "1024";
-			nvram_set("dblog_adj_syslog", "0");
-		}
-		else
-#endif /* RTCONFIG_DBLOG */
-#endif /* RTCONFIG_HND_ROUTER */
 		syslogd_argv[argc++] = nvram_safe_get("log_size");
 	}
 	if (nvram_invmatch("log_level", "")) {
@@ -6926,8 +6927,7 @@ void start_upnp(void)
 					"serial=%s\n"
 					"uuid=%s\n"
 #ifdef RTCONFIG_IGD2
-					"ipv6_disable=%s\n"
-					"lease_file6=/tmp/upnp.leases6\n"
+					"%s\n"
 #endif
 					"lease_file=%s\n",
 					get_wan_ifname(unit),
@@ -6950,7 +6950,7 @@ void start_upnp(void)
 					get_productid(),
 					nvram_get("serial_no") ? : serial, uuid,
 #ifdef RTCONFIG_IGD2
-					nvram_get_int("upnp_pinhole_enable") ? "no" : "yes",
+					nvram_get_int("upnp_pinhole_enable") ? "lease_file6=/tmp/upnp.leases6" : "",
 #endif
 					"/tmp/upnp.leases");
 
@@ -7126,8 +7126,8 @@ void start_upnp(void)
 				use_custom_config("upnp", "/etc/upnp/config");
 				run_postconf("upnp", "/etc/upnp/config");
 #ifdef RTCONFIG_IGD2
-				if (!nvram_get_int("upnp_pinhole_enable"))
-					xstart("miniupnpd", "-f", "/etc/upnp/config", "-1");
+				if (nvram_get_int("upnp_pinhole_enable"))
+					xstart("miniupnpd-igdv2", "-f", "/etc/upnp/config");
 				else
 #endif
 					xstart("miniupnpd", "-f", "/etc/upnp/config");
@@ -7148,6 +7148,10 @@ void stop_upnp(void)
 	}
 
 	killall_tk("miniupnpd");
+#ifdef RTCONFIG_IGD2
+	killall_tk("miniupnpd-igdv2");
+#endif
+
 #ifdef RTCONFIG_AUPNPC
 	stop_aupnpc();
 #endif
@@ -9291,6 +9295,7 @@ void chilli_config(void)
 		fprintf(fp, "localusers %s\n", "/tmp/localusers");
 		if (!(local_fp = fopen("/tmp/localusers", "w"))) {
 			perror("/tmp/localusers");
+			fclose(fp);
 			return;
 		}
 		fprintf(local_fp, "noauth:noauth");
@@ -19965,8 +19970,8 @@ int start_nat_rules(void)
 	if (nat_state == NAT_STATE_NORMAL) {
 #if defined(RTCONFIG_QCA) || defined(RTCONFIG_RALINK)
 		setup_ct_timeout(TRUE);
-		setup_udp_timeout(TRUE);
 #endif
+		setup_udp_timeout(TRUE);
 		return nat_state;
 }
 
@@ -20665,6 +20670,20 @@ void start_Tor_proxy(void)
 	fprintf(fp, "AutomapHostsOnResolve 1\n");
 	fprintf(fp, "TransPort %s:%s\n", nvram_safe_get( "lan_ipaddr" ), Transport);
 	fprintf(fp, "DNSPort %s:%s\n", nvram_safe_get( "lan_ipaddr" ), Dnsport);
+#ifdef RTCONFIG_IPV6
+	if (ipv6_enabled()) {
+		/* Bind the same TransPort/DNSPort to the LAN's IPv6 address so that
+		 * the ip6tables PREROUTING REDIRECT rules (see write_tor_nat_rules6()
+		 * in rc/firewall.c) have somewhere local to land. Tor accepts both
+		 * IPv4 and IPv6 traffic on these ports by default (IPv6Traffic is on
+		 * unless explicitly disabled), so no extra flags are needed here. */
+		const char *lan6_ip = ipv6_router_address(NULL);
+		if (lan6_ip && *lan6_ip) {
+			fprintf(fp, "TransPort [%s]:%s\n", lan6_ip, Transport);
+			fprintf(fp, "DNSPort [%s]:%s\n", lan6_ip, Dnsport);
+		}
+	}
+#endif
 	fprintf(fp, "RunAsDaemon 1\n");
 	fprintf(fp, "DataDirectory /tmp/.tordb\n");
 	fprintf(fp, "AvoidDiskWrites 1\n");
@@ -21026,6 +21045,10 @@ ddns_custom_updated_main(int argc, char *argv[])
 	if ((argc == 2 && !strcmp(argv[1], "1")) || (argc == 1)) {
 		nvram_set("ddns_status", "1");
 		nvram_set("ddns_updated", "1");
+#ifdef RTCONFIG_IPV6
+		if (nvram_get_int("ddns_ipv6_update"))
+			nvram_set("ddns_ipv6_updated", "1");
+#endif
 		nvram_set("ddns_return_code", "200");
 		nvram_set("ddns_return_code_chk", "200");
 		nvram_set("ddns_server_x_old", nvram_safe_get("ddns_server_x"));
@@ -23021,7 +23044,7 @@ static void server_handler(int sock)
 	ret = select(sock+1, &rmask, NULL, NULL, &select_timeout);
 	if (ret > 0) {
 		FILE *fp;
-		char *buf;
+		char *buf = NULL;
 		int read_len = 0, tmp_len, buf_len;
 		len = read(sock, cmd, sizeof(cmd)-1);
 		if (len > 0) {
@@ -23033,11 +23056,14 @@ static void server_handler(int sock)
 				read_len = buf_len = 0;
 				while (1) {
 					buf_len += STEP_BUF_SIZE;
-					buf = (char *)realloc(buf, buf_len);
-					if (!buf) {
+					char *new_buf = (char *)realloc(buf, buf_len);
+					if (!new_buf) {
+						free(buf);
+						buf = NULL;
 						read_len=0;
 						break;
 					}
+					buf = new_buf;
 					tmp_len = fread(buf+read_len, 1, STEP_BUF_SIZE, fp);
 					read_len += tmp_len;
 					if (tmp_len < STEP_BUF_SIZE)
@@ -23057,6 +23083,7 @@ static void server_handler(int sock)
 				cmd[0]='\0';
 				write(sock, cmd, 1);
 			}
+			free(buf);
 		}
 	}
 	close(sock);
@@ -23148,6 +23175,201 @@ void PS_pod_main(void)
 }
 #endif
 
+<<<<<<< HEAD
+=======
+#ifdef RTCONFIG_GETREALIP
+#define STUN_RESULT	"/tmp/stun.res"
+int realip_main(int argc, char *argv[])
+{
+	char *stun_server_list[] = {
+		"stun.l.google.com",
+		"stun.stunprotocol.org",
+		"stun4.l.google.com:19302",
+		// "stun3.l.google.com:19302",
+		// "stun2.l.google.com:19302",
+		// "stun1.l.google.com:19302",
+		"stun.pjsip.org",
+		// "stun.linphone.org",
+		// "stun.freeswitch.org",
+		// "stun.develz.org",
+		// "stun.wifirst.net",
+		// "stun.sipnet.net",
+		// "stun.sipgate.net",
+		// "stun.rolmail.net",
+		// "stun.nonoh.net",
+		// "stun.nfon.net",
+		// "stun.infra.net",
+		// "stun.dus.net",
+		""};
+	int i = 0;
+	int wan_unit;
+	char wan_prefix[16] = {0};
+	char wan_ifname[IFNAMSIZ] = {0};
+	char wan_gateway[INET_ADDRSTRLEN] = {0};
+	char stun_server[64] = {0};
+	char *stun_argv[] = {"ministun", "-t", "1000", "-c", "1"
+		, "-i", wan_ifname, stun_server
+		, NULL};
+	char buf[64] = {0};
+	char *server, *tmp_server, *port;
+	char stun_server_ip[INET_ADDRSTRLEN] = {0};
+	char table_str[8] = "main";
+#if defined(RTCONFIG_MULTIWAN_IF) || defined(RTCONFIG_DUALWAN)
+	char pref_str[8] = "30";
+#endif
+#ifdef RTCONFIG_MULTIWAN_IF
+	int is_mtwan;
+#endif
+#ifdef RTCONFIG_DUALWAN
+	int load_balance = (nvram_match("wans_mode", "lb") && get_nr_wan_unit() > 1) ? 1 : 0;
+#endif
+	int ret;
+	int success = 0;
+
+	if (argc < 2) {
+		printf("Usage: realip <wan_unit>\n");
+		return EXIT_FAILURE;
+	}
+
+	wan_unit = safe_atoi(argv[1]);
+	snprintf(wan_prefix, sizeof(wan_prefix), "wan%d_", wan_unit);
+#ifdef RTCONFIG_MULTIWAN_IF
+	is_mtwan = is_mtwan_unit(wan_unit);
+	if (is_mtwan) {
+		wan_unit = mtwan_get_real_wan(wan_unit, wan_prefix, sizeof(wan_prefix));
+		if (wan_unit < 0) {
+			printf("Get WAN(%d) dualwan_idx failed\n", safe_atoi(argv[1]));
+			return -10;
+		}
+		mtwan_get_route_table_id(wan_unit, table_str, sizeof(table_str));
+	}
+#endif
+#ifdef RTCONFIG_DUALWAN
+	if (load_balance && wan_unit < WAN_UNIT_MAX)
+		snprintf(table_str, sizeof(table_str), "%d", IP_ROUTE_TABLE_ID_DUALWAN_BASE + wan_unit * 100);
+#endif
+	if (nvram_pf_get_int(wan_prefix, "state_t") != WAN_STATE_CONNECTED) {
+		printf("WAN(%d) is not connected\n", wan_unit);
+		return -1;
+	}
+
+	while (nvram_get_int("link_internet") != 2)
+		sleep(1);
+
+	strlcpy(wan_ifname, get_wan_ifname(wan_unit), sizeof(wan_ifname));
+	strlcpy(wan_gateway, nvram_pf_safe_get(wan_prefix, "gateway"), sizeof(wan_gateway));
+
+	for (i = 0; stun_server_list[i]; i++) {
+		strlcpy(buf, stun_server_list[i], sizeof(buf));
+		server = tmp_server = buf;
+		port = NULL;
+		if (strchr(buf, ':')) {
+			server = strsep(&tmp_server, ":");
+			port = tmp_server;
+		}
+		if (resolv_addr4(server, stun_server_ip, sizeof(stun_server_ip)) < 0) {
+			printf("resolve stun server failed\n");
+			return -2;
+		}
+
+		// add stun server route
+#ifdef RTCONFIG_MULTIWAN_IF
+		if (is_mtwan)
+			eval("ip", "rule", "add", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+#ifdef RTCONFIG_DUALWAN
+		if (load_balance && wan_unit < WAN_UNIT_MAX)
+			eval("ip", "rule", "add", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+		eval("ip", "route", "add", stun_server_ip, "via", wan_gateway, "dev", wan_ifname, "table", table_str);
+
+		if (port)
+			snprintf(stun_server, sizeof(stun_server), "%s:%s", stun_server_ip, port);
+		else
+			strlcpy(stun_server, stun_server_ip, sizeof(stun_server));
+		// _dprintf("final stun server: %s\n", stun_server);
+
+		ret = _eval(stun_argv, ">"STUN_RESULT, 0, NULL);
+
+		// del stun server route
+#ifdef RTCONFIG_MULTIWAN_IF
+		eval("ip", "rule", "del", "iif", "lo", "to", stun_server_ip, "table", table_str, "pref", pref_str);
+#endif
+		eval("ip", "route", "del", stun_server_ip, "via", wan_gateway, "dev", wan_ifname, "table", table_str);
+
+		if (!ret) {
+			FILE *fp = fopen(STUN_RESULT, "r");
+			while (fp && fgets(buf, sizeof(buf), fp)) {
+				trimNL(buf);
+				if (is_valid_ip4(buf)) {
+					success = 1;
+					break;
+				}
+			}
+			if (fp)
+				fclose(fp);
+
+			if (success) {
+				printf("%s\n", buf);
+				nvram_pf_set(wan_prefix, "realip_ip", buf);
+				nvram_pf_set(wan_prefix, "realip_state", "2");
+				break;
+			}
+		}
+	}
+
+	if (!success)
+		nvram_pf_set(wan_prefix, "realip_state", "1");
+
+	unlink(STUN_RESULT);
+
+	return (success) ? 0 : -3;
+}
+#endif
+
+#ifdef RTCONFIG_FAST_ACL_SET
+void start_setacl_not_restart_wifi(void)
+{
+	int bssidx=-1;
+	int vifidx=-1;
+	int stop_flag=0;
+
+	if(nvram_safe_get("acl_tmp_bssidx") == NULL || nvram_safe_get("acl_tmp_vifidx")== NULL){
+		_dprintf("parameters for acl setting are incorrect\n");
+		return;
+	}
+
+	bssidx=nvram_get_int("acl_tmp_bssidx");
+	vifidx=nvram_get_int("acl_tmp_vifidx");
+
+	nvram_unset("acl_tmp_bssidx");
+	nvram_unset("acl_tmp_vifidx");
+
+	//if(vifidx > 0)
+	//	snprintf(prefix, sizeof(prefix), "wl%d.%d_", bssidx, vifidx);
+	//else
+	//	snprintf(prefix, sizeof(prefix), "wl%d_", bssidx);
+
+	/* set a nvram parameter to avoid watchdog restart related services before acl setting is done */
+	nvram_set_int("watchdog_wait_a_moment",1);
+	/* stop related funcions and let watchdog restart them */
+	check_stop_flag(&stop_flag);
+#ifdef BCM_BSD	
+	if(stop_flag&STOP_BSD) stop_bsd();
+#endif	
+	if(stop_flag&STOP_ROAMAST) stop_roamast();
+
+	/* sysdeps: set mac mode/list and remove */
+	set_acl_and_remove_sta(bssidx, vifidx);
+
+
+	/* unset related nvram */
+	nvram_unset("watchdog_wait_a_moment");
+
+}
+#endif //RTCONFIG_FAST_ACL_SET
+
+>>>>>>> 53c17580e2 (rc: fix various memory leaks, mostly inside error handling cases)
 
 #if defined(RTCONFIG_HND_ROUTER_AX)
 int set_cable_media(const char *eth_inf, const char *media_type){

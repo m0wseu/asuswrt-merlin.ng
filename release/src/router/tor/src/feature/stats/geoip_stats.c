@@ -178,6 +178,32 @@ clientmap_entry_free_(clientmap_entry_t *ent)
   tor_free(ent);
 }
 
+/** Number of leading bytes of an IPv6 address that identify a client in the
+ * clientmap, that is a /64. */
+#define CLIENTMAP_IPV6_PREFIX_BYTES 8
+
+/** Set <b>key_out</b> to the address under which a client connecting from
+ * <b>addr</b> is tracked in the clientmap.
+ *
+ * An IPv4 client is tracked by its /32.
+ * An IPv6 client is tracked by its /64 (see CLIENTMAP_IPV6_PREFIX_BYTES) */
+static void
+clientmap_get_key_addr(const tor_addr_t *addr, tor_addr_t *key_out)
+{
+  uint8_t bytes[16];
+
+  if (tor_addr_family(addr) != AF_INET6) {
+    tor_addr_copy(key_out, addr);
+    return;
+  }
+
+  /* Extract the IPv6 prefix. */
+  memcpy(bytes, tor_addr_to_in6_addr8(addr), sizeof(bytes));
+  memset(bytes + CLIENTMAP_IPV6_PREFIX_BYTES, 0,
+         sizeof(bytes) - CLIENTMAP_IPV6_PREFIX_BYTES);
+  tor_addr_from_ipv6_bytes(key_out, bytes);
+}
+
 /* Return a newly allocated clientmap entry with the given action and address
  * that are mandatory. The transport_name can be optional. This can't fail. */
 static clientmap_entry_t *
@@ -192,7 +218,7 @@ clientmap_entry_new(geoip_client_action_t action, const tor_addr_t *addr,
 
   entry = tor_malloc_zero(sizeof(clientmap_entry_t));
   entry->action = action;
-  tor_addr_copy(&entry->addr, addr);
+  clientmap_get_key_addr(addr, &entry->addr);
   if (transport_name) {
     entry->transport_name = tor_strdup(transport_name);
   }
@@ -305,11 +331,12 @@ geoip_lookup_client(const tor_addr_t *addr, const char *transport_name,
                     geoip_client_action_t action)
 {
   clientmap_entry_t lookup;
+  memset(&lookup, 0, sizeof(lookup));
 
   tor_assert(addr);
 
   /* We always look for a client connection with no transport. */
-  tor_addr_copy(&lookup.addr, addr);
+  clientmap_get_key_addr(addr, &lookup.addr);
   lookup.action = action;
   lookup.transport_name = (char *) transport_name;
 
@@ -389,8 +416,8 @@ geoip_client_cache_total_allocation(void)
  * statuses? */
 static uint32_t ns_v3_responses[GEOIP_NS_RESPONSE_NUM];
 
-/** Note that we've rejected a client's request for a v3 network status
- * for reason <b>reason</b> at time <b>now</b>. */
+/** Note how we have handled a client's request for a v3 network status:
+ * with <b>reason</b> at time <b>now</b>. */
 void
 geoip_note_ns_response(geoip_ns_response_t response)
 {
@@ -996,7 +1023,8 @@ geoip_format_dirreq_stats(time_t now)
   tor_asprintf(&result, "dirreq-stats-end %s (%d s)\n"
               "dirreq-v3-ips %s\n"
               "dirreq-v3-reqs %s\n"
-              "dirreq-v3-resp ok=%u,not-enough-sigs=%u,unavailable=%u,"
+              "dirreq-v3-resp "
+                   "served=%u,ok=%u,not-enough-sigs=%u,unavailable=%u,"
                    "not-found=%u,not-modified=%u,busy=%u\n"
               "dirreq-v3-direct-dl %s\n"
               "dirreq-v3-tunneled-dl %s\n",
@@ -1004,6 +1032,7 @@ geoip_format_dirreq_stats(time_t now)
               (unsigned) (now - start_of_dirreq_stats_interval),
               v3_ips_string ? v3_ips_string : "",
               v3_reqs_string ? v3_reqs_string : "",
+              ns_v3_responses[GEOIP_SERVED],
               ns_v3_responses[GEOIP_SUCCESS],
               ns_v3_responses[GEOIP_REJECT_NOT_ENOUGH_SIGS],
               ns_v3_responses[GEOIP_REJECT_UNAVAILABLE],

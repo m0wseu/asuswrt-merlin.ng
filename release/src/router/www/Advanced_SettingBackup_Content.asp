@@ -83,7 +83,8 @@ function saveSetting(mode){
 			flag = 1;
 		}
 		else{	//ASUS DDNS
-			flag = document.getElementById("transfer_ddns").checked ? 1 : 0;
+			flag = (document.getElementById("transfer_ddns_field").style.display != "none" &&
+				document.getElementById("transfer_ddns").checked) ? 1 : 0;
 		}
 	}
 	remove_passwd = document.getElementById("remove_passwd").checked ? 1 : 0;
@@ -291,7 +292,7 @@ function selectSetting() {
 														</div>
 														<div id="transfer_ddns_field" style="display:table-row">
 															<div style="float:left;margin-left:5px;">
-																<input id="transfer_ddns" type="checkbox">
+																<input id="transfer_ddns" type="checkbox" checked>
 															</div>
 															<div style="float:left;width:80%;">
 																<span><label for="transfer_ddns"><#DDNS_transfer#></span></label>

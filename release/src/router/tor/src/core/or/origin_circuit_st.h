@@ -135,6 +135,9 @@ struct origin_circuit_t {
    */
   crypt_path_t *cpath;
 
+  /** Channel first-hop success count when our CREATE was queued. */
+  uint64_t first_hop_success_count_at_create;
+
   /** Holds hidden service identifier on either client or service side. This
    * is for both introduction and rendezvous circuit. */
   struct hs_ident_circuit_t *hs_ident;
@@ -230,6 +233,24 @@ struct origin_circuit_t {
    * no circuits have opened. Used to prevent spamming logs. */
   unsigned int relaxed_timeout : 1;
 
+  /** The initial three-hop CBT observation was handled, even if discarded.
+   * Later extensions must not contribute adaptive failure observations. */
+  unsigned int cbt_prefix_measurement_done : 1;
+
+  /** The CBT close deadline was handled, possibly before probe expiry. */
+  unsigned int cbt_measurement_closed : 1;
+
+  /** This attempt predates recovery from an unusable CBT history. */
+  unsigned int cbt_observation_invalidated : 1;
+
+  /** A counted soft timeout still needs first-hop qualification. */
+  unsigned int cbt_timeout_pending_qualification : 1;
+
+  /** Diagnostic bookkeeping only; none of these bits change timeout policy. */
+  unsigned int cbt_soft_timeout_before_firsthop : 1;
+  unsigned int cbt_expiry_reported : 1;
+  unsigned int cbt_exclusion_reported : 1;
+
   /** What commands were sent over this circuit that decremented the
    * RELAY_EARLY counter? This is for debugging task 878. */
   uint8_t relay_early_commands[MAX_RELAY_EARLY_CELLS_PER_CIRCUIT];
@@ -290,7 +311,7 @@ struct origin_circuit_t {
   int session_group;
   unsigned nym_epoch;
   size_t socks_username_len;
-  uint8_t socks_password_len;
+  size_t socks_password_len;
   /* Note that the next two values are NOT NUL-terminated; see
      socks_username_len and socks_password_len for their lengths. */
   char *socks_username;

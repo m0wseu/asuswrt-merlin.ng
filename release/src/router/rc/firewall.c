@@ -295,6 +295,77 @@ static int addr_type_parse(const char *src, char *dst, int size)
 	return TYPE_IP;
 }
 
+#if defined(RTCONFIG_TOR) && defined(RTCONFIG_IPV6)
+/* IPv6 counterpart of the Tor PREROUTING REDIRECT rules built in nat_setting()/
+ * nat_setting2(). Must run after anything that flushes or restores the ip6tables
+ * nat table (e.g. the ip6tables-restore call used for RTCONFIG_DNSFILTER), or
+ * these rules get wiped out again -- callers should invoke this after that.
+ *
+ * Only MAC-based Tor_redir_list entries carry over here: TYPE_IP/TYPE_IPRANGE
+ * entries are IPv4 literals with no IPv6 equivalent, so a device selected by
+ * IPv4 address (rather than by MAC) will still bypass Tor over IPv6 whenever
+ * the list is non-empty.
+ */
+void write_tor_nat_rules6(char *lan_if)
+{
+	char *nv, *nvp, *b;
+	char addr_new[32];
+	int addr_type;
+	const char *lan6_ip;
+	char lan6_class[64];
+	char *dnsport, *transport;
+	int plen;
+
+	if (!ipv6_enabled() || !nvram_match("Tor_enable", "1"))
+		return;
+
+	lan6_ip = ipv6_router_address(NULL);
+	if (!lan6_ip || !*lan6_ip)
+		return;
+
+	plen = nvram_get_int(ipv6_nvname("ipv6_prefix_length"));
+	if (plen <= 0 || plen > 128)
+		plen = 64;
+	snprintf(lan6_class, sizeof(lan6_class), "%s/%d", lan6_ip, plen);
+
+	dnsport = nvram_safe_get("Tor_dnsport");
+	transport = nvram_safe_get("Tor_transport");
+
+	nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+	if (!nv)
+		return;
+
+	if (strlen(nv) == 0) {
+		eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+			"-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", dnsport);
+		eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+			"-p", "udp", "--dport", "123", "-j", "REDIRECT", "--to-ports", "123");
+		eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+			"-p", "tcp", "--syn", "!", "-d", lan6_class, "-j", "REDIRECT", "--to-ports", transport);
+	} else {
+		while ((b = strsep(&nvp, "<")) != NULL) {
+			if (strlen(b) == 0)
+				continue;
+			memset(addr_new, 0, sizeof(addr_new));
+			addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
+			if (addr_type != TYPE_MAC)
+				continue;
+
+			eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+				"-p", "udp", "--dport", "53", "-m", "mac", "--mac-source", addr_new,
+				"-j", "REDIRECT", "--to-ports", dnsport);
+			eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+				"-p", "udp", "--dport", "123", "-m", "mac", "--mac-source", addr_new,
+				"-j", "REDIRECT", "--to-ports", "123");
+			eval("ip6tables", "-t", "nat", "-I", "PREROUTING", "-i", lan_if,
+				"-p", "tcp", "--syn", "!", "-d", lan6_class, "-m", "mac", "--mac-source", addr_new,
+				"-j", "REDIRECT", "--to-ports", transport);
+		}
+	}
+	free(nv);
+}
+#endif
+
 
 char *proto_conv(char *proto, char *buf)
 {
@@ -1626,7 +1697,7 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 	if (wan_unit > WAN_UNIT_MULTISRV_BASE) return;
 #endif
 #ifdef RTCONFIG_IPV6
-#if defined(RTCONFIG_OPENVPN) || defined(RTCONFIG_WIREGUARD)
+#if defined(RTCONFIG_OPENVPN) || defined(RTCONFIG_WIREGUARD) || defined(RTCONFIG_TOR)
 	if (ipv6_enabled()) {
 		eval("ip6tables", "-t", "nat", "-F");
 	}
@@ -1730,6 +1801,7 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 						*ptr = ':';
 					fprintf(fp, "-A MAPE -p %s --dport %s -j RETURN\n", proto, item);
 				}
+				free(nv);
 				fprintf(fp, "-A MAPE -p %s -j DNAT --to-destination %s\n", proto, "169.254.7.7");
 			}
 			fprintf(fp, "-A MAPE -p icmp -j DNAT --to-destination %s\n", "169.254.7.7");
@@ -2032,14 +2104,15 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 
 #ifdef RTCONFIG_TOR
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 		fprintf(fp, "-I PREROUTING -i %s -p udp --dport 53 -j REDIRECT --to-ports %s\n", lan_if, nvram_safe_get("Tor_dnsport"));
 		fprintf(fp, "-I PREROUTING -i %s -p udp --dport 123 -j REDIRECT --to-ports 123\n", lan_if); // requires an NTP server
 		fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, nvram_safe_get("Tor_transport"));
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -2059,8 +2132,8 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 					fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -m iprange --src-range %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, addr_new, nvram_safe_get("Tor_transport"));
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 
@@ -2078,6 +2151,10 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 			eval("ip6tables-restore", "/tmp/nat_rules_ipv6.dnsfilter");
 		}
 	}
+#endif
+
+#ifdef RTCONFIG_TOR
+	write_tor_nat_rules6(lan_if);
 #endif
 
 	fprintf(fp, "COMMIT\n");
@@ -2128,7 +2205,7 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 #endif
 
 #ifdef RTCONFIG_IPV6
-#if defined(RTCONFIG_OPENVPN) || defined(RTCONFIG_WIREGUARD)
+#if defined(RTCONFIG_OPENVPN) || defined(RTCONFIG_WIREGUARD) || defined(RTCONFIG_TOR)
 	if (ipv6_enabled()) {
 		eval("ip6tables", "-t", "nat", "-F");
 	}
@@ -2549,14 +2626,15 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 
 #ifdef RTCONFIG_TOR
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 			fprintf(fp, "-I PREROUTING -i %s -p udp --dport 53 -j REDIRECT --to-ports %s\n", lan_if, nvram_safe_get("Tor_dnsport"));
 			fprintf(fp, "-I PREROUTING -i %s -p udp --dport 123 -j REDIRECT --to-ports 123\n", lan_if); // requires an NTP server
 			fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, nvram_safe_get("Tor_transport"));
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -2576,8 +2654,8 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 					fprintf(fp, "-I PREROUTING -i %s -p tcp --syn ! -d %s -m iprange --src-range %s -j REDIRECT --to-ports %s\n", lan_if, lan_class, addr_new, nvram_safe_get("Tor_transport"));
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 
@@ -2595,6 +2673,10 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 			eval("ip6tables-restore", "/tmp/nat_rules_ipv6.dnsfilter");
 		}
 	}
+#endif
+
+#ifdef RTCONFIG_TOR
+	write_tor_nat_rules6(lan_if);
 #endif
 
 	fprintf(fp, "COMMIT\n");
@@ -2700,11 +2782,13 @@ void redirect_setting(void)
 	add_nat_rule_for_gpon_sfp_module(redirect_fp);
 #endif
 
-	fprintf(redirect_fp,
-		"-A PREROUTING ! -d %s -p tcp --dport 80 -j DNAT --to-destination %s:18017\n"
-		"-A PREROUTING -p udp --dport 53 -j DNAT --to-destination %s:18018\n",
-		lan_class, lan_ipaddr_t,
-		lan_ipaddr_t);
+	if (is_nat_enabled() && nvram_match("x_Setting", "0")) {
+		fprintf(redirect_fp,
+			"-A PREROUTING ! -d %s -p tcp --dport 80 -j DNAT --to-destination %s:18017\n"
+			"-A PREROUTING -p udp --dport 53 -j DNAT --to-destination %s:18018\n",
+			lan_class, lan_ipaddr_t,
+			lan_ipaddr_t);
+	}
 #ifdef RTCONFIG_YANDEXDNS
 	fprintf(redirect_fp,
 		"-I YADNS 1 -p udp -j DNAT --to-destination %s:18018\n", lan_ipaddr_t);
@@ -3059,9 +3143,10 @@ void set_cap_apmode_filter(void)
 	char lan_class[32];
 	int evalRet;
 
-	if((fp = fopen(cap_rules, "w")) == NULL)
-		return;
 	if (sw_mode() == SW_MODE_REPEATER)
+		return;
+
+	if((fp = fopen(cap_rules, "w")) == NULL)
 		return;
 
 	ip2class(nvram_safe_get("lan_ipaddr"), nvram_safe_get("lan_netmask"), lan_class);
@@ -4857,12 +4942,17 @@ TRACE_PT("write wl filter\n");
 	 // for TOR users, block anything that cannot be routed through the TOR network (i.e. UDP and ICMP ping)
 	 // otherwise, it's a leak that could reveal your router's IP address
 	 if(nvram_match("Tor_enable", "1")){
-		nv = strdup(nvram_safe_get("Tor_redir_list"));
-		if (strlen(nv) == 0) {
+		char *nvp;
+		nv = nvp = strdup(nvram_safe_get("Tor_redir_list"));
+		if (nv && strlen(nv) == 0) {
 		fprintf(fp, "-I FORWARD -i %s -j DROP\n", lan_if);
+#ifdef RTCONFIG_IPV6
+		if (fp_ipv6)
+			fprintf(fp_ipv6, "-I FORWARD -i %s -j DROP\n", lan_if);
+#endif
 		}
 		else{
-			while ((b = strsep(&nv, "<")) != NULL) {
+			while ((b = strsep(&nvp, "<")) != NULL) {
 				if (strlen(b)==0) continue;
 				memset(addr_new, 0, sizeof(addr_new));
 				addr_type = addr_type_parse(b, addr_new, sizeof(addr_new));
@@ -4871,13 +4961,18 @@ TRACE_PT("write wl filter\n");
 				}
 				else if (addr_type == TYPE_MAC){
 					fprintf(fp, "-I FORWARD -i %s -m mac --mac-source %s -j DROP\n", lan_if, addr_new);
+#ifdef RTCONFIG_IPV6
+					/* MAC match is protocol-agnostic: mirror the DROP for IPv6 forwarding. */
+					if (fp_ipv6)
+						fprintf(fp_ipv6, "-I FORWARD -i %s -m mac --mac-source %s -j DROP\n", lan_if, addr_new);
+#endif
 				}
 				else if (addr_type == TYPE_IPRANGE){
 					fprintf(fp, "-I FORWARD -i %s -m iprange --src-range %s -j DROP\n", lan_if, addr_new);
 				}
 			}
-			free(nv);
 		}
+		free(nv);
 	}
 #endif
 

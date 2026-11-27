@@ -27,10 +27,11 @@
     }                                           \
   } while (0)
 
-  /* Make sure that country ID actually works. */
+  /* Make sure that country ID actually works. The fake IPv6 addresses differ
+   * in their /64 because that is what the client history tracks. */
 #define SET_TEST_IPV6(i) \
   do {                                                          \
-    set_uint32(in6.s6_addr + 12, htonl((uint32_t) (i)));        \
+    set_uint32(in6.s6_addr + 4, htonl((uint32_t) (i)));         \
   } while (0)
 #define CHECK_COUNTRY(country, val) do {                                \
     /* test ipv4 country lookup */                                      \
@@ -58,7 +59,8 @@ test_geoip(void *arg)
       "dirreq-stats-end 2010-08-12 13:27:30 (86400 s)\n"
       "dirreq-v3-ips ab=8\n"
       "dirreq-v3-reqs ab=8\n"
-      "dirreq-v3-resp ok=0,not-enough-sigs=0,unavailable=0,not-found=0,"
+      "dirreq-v3-resp "
+          "served=0,ok=0,not-enough-sigs=0,unavailable=0,not-found=0,"
           "not-modified=0,busy=0\n"
       "dirreq-v3-direct-dl complete=0,timeout=0,running=0\n"
       "dirreq-v3-tunneled-dl complete=0,timeout=0,running=0\n",
@@ -66,7 +68,8 @@ test_geoip(void *arg)
       "dirreq-stats-end 2010-08-12 13:27:30 (86400 s)\n"
       "dirreq-v3-ips \n"
       "dirreq-v3-reqs \n"
-      "dirreq-v3-resp ok=0,not-enough-sigs=0,unavailable=0,not-found=0,"
+      "dirreq-v3-resp "
+          "served=0,ok=0,not-enough-sigs=0,unavailable=0,not-found=0,"
           "not-modified=0,busy=0\n"
       "dirreq-v3-direct-dl complete=0,timeout=0,running=0\n"
       "dirreq-v3-tunneled-dl complete=0,timeout=0,running=0\n",
@@ -74,7 +77,8 @@ test_geoip(void *arg)
       "dirreq-stats-end 2010-08-12 13:27:30 (86400 s)\n"
       "dirreq-v3-ips \n"
       "dirreq-v3-reqs \n"
-      "dirreq-v3-resp ok=8,not-enough-sigs=0,unavailable=0,not-found=0,"
+      "dirreq-v3-resp "
+          "served=8,ok=8,not-enough-sigs=0,unavailable=0,not-found=0,"
           "not-modified=0,busy=0\n"
       "dirreq-v3-direct-dl complete=0,timeout=0,running=0\n"
       "dirreq-v3-tunneled-dl complete=0,timeout=0,running=0\n",
@@ -82,7 +86,8 @@ test_geoip(void *arg)
       "dirreq-stats-end 2010-08-12 13:27:30 (86400 s)\n"
       "dirreq-v3-ips \n"
       "dirreq-v3-reqs \n"
-      "dirreq-v3-resp ok=8,not-enough-sigs=0,unavailable=0,not-found=0,"
+      "dirreq-v3-resp "
+          "served=8,ok=8,not-enough-sigs=0,unavailable=0,not-found=0,"
           "not-modified=0,busy=0\n"
       "dirreq-v3-direct-dl complete=0,timeout=0,running=0\n"
       "dirreq-v3-tunneled-dl complete=0,timeout=0,running=4\n",
@@ -107,12 +112,12 @@ test_geoip(void *arg)
   tt_int_op(0,OP_EQ, geoip_parse_entry("\"200\",\"250\",\"AB\"", AF_INET));
 
   /* Populate the IPv6 DB equivalently with fake IPs in the same range */
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::a,::32,AB", AF_INET6));
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::34,::5a,XY", AF_INET6));
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::5f,::64,AB", AF_INET6));
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::69,::8c,ZZ", AF_INET6));
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::96,::be,XY", AF_INET6));
-  tt_int_op(0,OP_EQ, geoip_parse_entry("::c8,::fa,AB", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:a::,0:0:0:32::,AB", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:34::,0:0:0:5a::,XY", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:5f::,0:0:0:64::,AB", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:69::,0:0:0:8c::,ZZ", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:96::,0:0:0:be::,XY", AF_INET6));
+  tt_int_op(0,OP_EQ, geoip_parse_entry("0:0:0:c8::,0:0:0:fa::,AB", AF_INET6));
 
   /* We should have 4 countries: ??, ab, xy, zz. */
   tt_int_op(4,OP_EQ, geoip_get_n_countries());
@@ -230,6 +235,7 @@ test_geoip(void *arg)
 
   /* Note a successful network status response and make sure that it
    * appears in the history string. */
+  geoip_note_ns_response(GEOIP_SERVED);
   geoip_note_ns_response(GEOIP_SUCCESS);
   s = geoip_format_dirreq_stats(now + 86400);
   tt_str_op(dirreq_stats_3,OP_EQ, s);
